@@ -1,0 +1,64 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: never
+  RUSTFLAGS: -D warnings
+  CARGO_DENY_VERSION: 0.20.2
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Single supported target: macOS arm64. No Linux or Windows job exists by design.
+  macos-arm64:
+    runs-on: macos-14
+    steps:
+      - name: Assert the runner is arm64
+        run: |
+          set -euo pipefail
+          test "${{ runner.arch }}" = "ARM64"
+          test "$(uname -m)" = "arm64"
+          test "$(uname -s)" = "Darwin"
+
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - name: Install the pinned toolchain
+        run: |
+          set -euo pipefail
+          grep -Eq '^channel = "[0-9]+\.[0-9]+\.[0-9]+"' rust-toolchain.toml
+          rustup show active-toolchain
+          rustc --version
+          cargo --version
+
+      - name: Format
+        run: cargo fmt --all -- --check
+
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets --all-features -- -D warnings
+
+      - name: Test
+        run: cargo test --workspace --all-targets
+
+      - name: Docs
+        run: cargo doc --workspace --no-deps
+
+      - name: Verify the lockfile is committed and current
+        run: cargo metadata --locked --format-version 1 > /dev/null
+
+      - name: Install cargo-deny
+        run: cargo install cargo-deny --locked --version "${CARGO_DENY_VERSION}"
+
+      - name: Supply chain
+        run: cargo deny check

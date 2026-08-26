@@ -1,0 +1,15 @@
+[package]
+name = "agent-jit-store"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+description = "Private per-user persistence for agent-jit."
+
+[dependencies]
+agent-jit-domain.workspace = true
+
+[lints]
+workspace = true
