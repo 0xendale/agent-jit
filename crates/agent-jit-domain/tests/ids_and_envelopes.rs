@@ -127,3 +127,22 @@ fn ids_are_ordered_by_their_rendered_form() {
     let second: TrajectoryId = "trj_01J0000000000000000000000B".parse().unwrap();
     assert!(first < second);
 }
+
+#[test]
+fn derived_ids_are_deterministic_and_kind_specific() {
+    use agent_jit_domain::canonical::digest_of;
+
+    let digest = digest_of(&serde_json::json!({"git_common_dir": "/repo/.git"})).unwrap();
+    let repository = RepositoryId::derived(&digest);
+    assert_eq!(repository, RepositoryId::derived(&digest));
+    assert_eq!(repository.to_string(), format!("rep_{}", repository.body()));
+    assert_eq!(repository.body().len(), 26);
+
+    let other = digest_of(&serde_json::json!({"git_common_dir": "/other/.git"})).unwrap();
+    assert_ne!(repository, RepositoryId::derived(&other));
+
+    // The same digest under a different kind renders differently but shares its body.
+    let session = SessionId::derived(&digest);
+    assert_eq!(session.body(), repository.body());
+    assert!(session.to_string().starts_with("ses_"));
+}

@@ -11,6 +11,12 @@ description = "Recorder, Phase 0, compiler, replay, and runtime engine for agent
 [dependencies]
 agent-jit-domain.workspace = true
 agent-jit-store.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
 
 [lints]
 workspace = true

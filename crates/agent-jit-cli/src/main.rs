@@ -6,6 +6,7 @@
 use std::io::{self, Write as _};
 use std::process::ExitCode;
 
+mod repo;
 mod schema;
 
 /// Exit code for a usage error (unknown command, missing argument).
@@ -16,6 +17,7 @@ const EXIT_FAILURE: u8 = 1;
 const USAGE: &str = "usage: agent-jit <command> [options]\n\
                      \n\
                      commands:\n\
+                     \x20 repo inspect --root <path>    report the identity of a repository\n\
                      \x20 schema generate --out <dir>   write the JSON Schemas for every contract\n\
                      \x20 schema validate <file>        validate one stored record document\n\
                      \x20 help                          print this message\n\
@@ -90,6 +92,7 @@ fn run(args: &[String]) -> Result<String, CommandError> {
             Ok(format!("agent-jit {}\n", env!("CARGO_PKG_VERSION")))
         }
         Some("--help" | "-h" | "help") => Ok(USAGE.to_owned()),
+        Some("repo") => repo::run(&args[1..]),
         Some("schema") => schema::run(&args[1..]),
         Some(other) => Err(CommandError::usage(format!(
             "unknown command: {other}\n\n{USAGE}"

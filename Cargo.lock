@@ -35,6 +35,10 @@ version = "0.1.0"
 dependencies = [
  "agent-jit-domain",
  "agent-jit-store",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror",
 ]
 
 [[package]]

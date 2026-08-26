@@ -10,6 +10,7 @@ pub mod candidate;
 pub mod canonical;
 pub mod capability;
 pub mod envelope;
+pub mod fingerprint;
 pub mod ids;
 pub mod lifecycle;
 pub mod outcome;

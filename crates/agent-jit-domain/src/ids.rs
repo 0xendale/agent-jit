@@ -142,6 +142,30 @@ impl<K: IdKind> Id<K> {
         })
     }
 
+    /// Derives a deterministic identifier from a digest.
+    ///
+    /// Identity that must be recomputed from the same inputs on a later run — a repository, a
+    /// group manifest — cannot use a random identifier. The body is the first 130 bits of the
+    /// digest in Crockford base32, so the same inputs always address the same record.
+    #[must_use]
+    pub fn derived(digest: &crate::canonical::Digest) -> Self {
+        let bytes = digest.as_bytes();
+        let mut body = [0_u8; ID_BODY_LEN];
+        for (index, slot) in body.iter_mut().enumerate() {
+            let bit = index * 5;
+            let byte = bit / 8;
+            let offset = bit % 8;
+            // Read five bits, spanning the byte boundary when necessary.
+            let window = (u16::from(bytes[byte]) << 8) | u16::from(bytes[byte + 1]);
+            let value = ((window >> (11 - offset)) & 0x1f) as usize;
+            *slot = ALPHABET[value];
+        }
+        Self {
+            body,
+            kind: PhantomData,
+        }
+    }
+
     /// Returns the identifier body without its prefix.
     #[must_use]
     pub fn body(&self) -> &str {
