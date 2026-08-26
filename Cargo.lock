@@ -22,6 +22,7 @@ dependencies = [
  "blake3",
  "insta",
  "proptest",
+ "regex",
  "schemars",
  "serde",
  "serde_json",

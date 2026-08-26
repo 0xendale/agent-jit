@@ -23,6 +23,7 @@ agent-jit-engine = { path = "crates/agent-jit-engine" }
 blake3 = "1.8.2"
 serde = { version = "1.0.219", features = ["derive"] }
 serde_json = { version = "1.0.140", features = ["preserve_order"] }
+regex = "1.11.1"
 schemars = "1.0.4"
 thiserror = "2.0.12"
 unicode-normalization = "0.1.24"

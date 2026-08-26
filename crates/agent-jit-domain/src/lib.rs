@@ -14,5 +14,6 @@ pub mod fingerprint;
 pub mod ids;
 pub mod lifecycle;
 pub mod outcome;
+pub mod redaction;
 pub mod schema;
 pub mod trace;

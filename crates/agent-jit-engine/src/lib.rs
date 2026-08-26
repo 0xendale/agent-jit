@@ -6,5 +6,6 @@
 
 pub mod fingerprint;
 pub mod host;
+pub mod normalize;
 pub mod process;
 pub mod repository;
