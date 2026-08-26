@@ -1,0 +1,7 @@
+/target/
+**/target/
+.omo/
+.omc/
+.codegraph
+.DS_Store
+/.agent-jit/
