@@ -1,0 +1,10 @@
+{
+  "session_id": "b2c3d4e5-1111-2222-3333-444455556666",
+  "transcript_path": "/Users/someone/.claude/projects/pilot/b2c3d4e5.jsonl",
+  "cwd": "/Users/someone/code/pipeline-viz",
+  "hook_event_name": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {"command": "cargo test --workspace"},
+  "tool_response": {"stdout": "", "stderr": "error: test failed", "interrupted": false},
+  "error": "Bash command exited with code 101"
+}

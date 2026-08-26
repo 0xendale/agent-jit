@@ -1,0 +1,9 @@
+{
+  "hook_event_name": "UserPromptSubmit",
+  "cwd": "/Users/someone/code/pipeline-viz",
+  "session_id": "b2c3d4e5-1111-2222-3333-444455556666",
+  "prompt": "validate this change the way this repository expects",
+  "transcript_path": "/Users/someone/.claude/projects/pilot/b2c3d4e5.jsonl",
+  "some_future_field": "added by a later Claude Code release",
+  "another_future_field": {"nested": true}
+}

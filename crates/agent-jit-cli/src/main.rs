@@ -9,6 +9,7 @@ use std::process::ExitCode;
 mod app;
 mod doctor;
 mod error;
+mod hook;
 mod output;
 mod repo;
 mod schema;
@@ -85,6 +86,7 @@ fn run(args: &[String]) -> Result<Rendered, CommandError> {
         "paths" => paths(&args[1..]),
         "doctor" => doctor::run(&args[1..]),
         "schema" => schema::run(&args[1..]),
+        "hook" => hook::run(&args[1..]),
         "repo" => repo::run(&args[1..]),
         "store" => store::run(&args[1..]),
         reserved if COMMANDS.iter().any(|(name, _)| *name == reserved) => {
