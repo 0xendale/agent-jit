@@ -1,0 +1,260 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Envelope_Invocation",
+  "type": "object",
+  "properties": {
+    "schema": {
+      "type": "string",
+      "const": "agent_jit.invocation"
+    },
+    "version": {
+      "type": "integer",
+      "const": 1
+    },
+    "id": {
+      "$ref": "#/$defs/InvocationId"
+    },
+    "provenance": {
+      "$ref": "#/$defs/Provenance"
+    },
+    "body": {
+      "$ref": "#/$defs/Invocation"
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "version",
+    "id",
+    "provenance",
+    "body"
+  ],
+  "$defs": {
+    "Invocation": {
+      "description": "One runtime invocation and its response.",
+      "type": "object",
+      "properties": {
+        "capability_id": {
+          "description": "Capability that was considered, when one matched.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CapabilityId"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "query": {
+          "description": "The intent text the agent supplied.",
+          "type": "string"
+        },
+        "response": {
+          "description": "The response returned to the agent.",
+          "$ref": "#/$defs/RuntimeResponse"
+        },
+        "duration_ms": {
+          "description": "Wall-clock duration of the invocation. Volatile: excluded from the digest.",
+          "type": "integer",
+          "format": "int64"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "query",
+        "response",
+        "duration_ms"
+      ]
+    },
+    "CapabilityId": {
+      "description": "Identifier for a Capability record.",
+      "type": "string",
+      "pattern": "^cap_[0-9A-HJKMNP-TV-Z]{26}$"
+    },
+    "RuntimeResponse": {
+      "description": "The three — and only three — answers the runtime may give.",
+      "oneOf": [
+        {
+          "description": "A capability ran and produced a validated result.",
+          "type": "object",
+          "properties": {
+            "capability_id": {
+              "description": "Capability version that ran.",
+              "$ref": "#/$defs/CapabilityId"
+            },
+            "output_digest": {
+              "description": "Digest of the canonical result document.",
+              "$ref": "#/$defs/Digest"
+            },
+            "output": {
+              "description": "Canonical result document, as produced by the capability.",
+              "$ref": "#/$defs/CapabilityOutput"
+            },
+            "result": {
+              "type": "string",
+              "const": "executed"
+            }
+          },
+          "required": [
+            "result",
+            "capability_id",
+            "output_digest",
+            "output"
+          ]
+        },
+        {
+          "description": "No capability matched the query; the agent should proceed normally.",
+          "type": "object",
+          "properties": {
+            "result": {
+              "type": "string",
+              "const": "not_found"
+            }
+          },
+          "required": [
+            "result"
+          ]
+        },
+        {
+          "description": "A capability matched but could not safely run; the agent must use its original path.",
+          "type": "object",
+          "properties": {
+            "reason": {
+              "description": "Why execution was refused.",
+              "$ref": "#/$defs/FallbackReason"
+            },
+            "detail": {
+              "description": "Human-readable detail for the agent's log.",
+              "type": "string"
+            },
+            "result": {
+              "type": "string",
+              "const": "fallback_required"
+            }
+          },
+          "required": [
+            "result",
+            "reason",
+            "detail"
+          ]
+        }
+      ]
+    },
+    "Digest": {
+      "description": "BLAKE3 digest of a canonical JSON byte string, lowercase hex.",
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "CapabilityOutput": {
+      "description": "A capability result document.\n\nThis is the one place a dynamic JSON value is legitimate: the shape is declared by the\ncapability's own output contract, which is validated before the value is ever constructed.\nIt is a schema boundary, not an escape hatch for untyped internals."
+    },
+    "FallbackReason": {
+      "description": "Why the runtime refused to execute.",
+      "oneOf": [
+        {
+          "description": "A precondition of the capability did not hold.",
+          "type": "string",
+          "const": "precondition_failed"
+        },
+        {
+          "description": "A dependency fingerprint no longer matches what the capability was validated against.",
+          "type": "string",
+          "const": "stale_fingerprint"
+        },
+        {
+          "description": "The capability is not in a routable state.",
+          "type": "string",
+          "const": "not_routable"
+        },
+        {
+          "description": "The sandbox was unavailable or failed its integrity check.",
+          "type": "string",
+          "const": "sandbox_unavailable"
+        },
+        {
+          "description": "Execution exceeded its deadline.",
+          "type": "string",
+          "const": "timeout"
+        },
+        {
+          "description": "Execution produced more output than the cap allows.",
+          "type": "string",
+          "const": "output_cap_exceeded"
+        },
+        {
+          "description": "The produced output failed its own contract validation.",
+          "type": "string",
+          "const": "output_invalid"
+        },
+        {
+          "description": "Execution failed for a reason the runtime does not classify further.",
+          "type": "string",
+          "const": "execution_failed"
+        }
+      ]
+    },
+    "InvocationId": {
+      "description": "Identifier for a Invocation record.",
+      "type": "string",
+      "pattern": "^inv_[0-9A-HJKMNP-TV-Z]{26}$"
+    },
+    "Provenance": {
+      "description": "Provenance recorded alongside every envelope.",
+      "type": "object",
+      "properties": {
+        "produced_by": {
+          "description": "Name and version of the component that produced the record, e.g. `agent-jit/0.1.0`.",
+          "type": "string"
+        },
+        "source": {
+          "description": "How the record entered the system.",
+          "$ref": "#/$defs/ProvenanceSource"
+        },
+        "recorded_at_unix_ms": {
+          "description": "Wall-clock time the record was produced. Volatile: never part of a digest.",
+          "type": "integer",
+          "format": "int64"
+        },
+        "parents": {
+          "description": "Digests of the records this one was derived from, in a stable order.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Digest"
+          },
+          "default": []
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "produced_by",
+        "source",
+        "recorded_at_unix_ms"
+      ]
+    },
+    "ProvenanceSource": {
+      "description": "How a record entered the system.",
+      "oneOf": [
+        {
+          "description": "Captured live from agent hooks.",
+          "type": "string",
+          "const": "recorded"
+        },
+        {
+          "description": "Imported from an exact-shape historical record.",
+          "type": "string",
+          "const": "imported"
+        },
+        {
+          "description": "Derived from other records already in the store.",
+          "type": "string",
+          "const": "derived"
+        },
+        {
+          "description": "Confirmed by a human operator.",
+          "type": "string",
+          "const": "confirmed"
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,198 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Envelope_CapabilityVersion",
+  "type": "object",
+  "properties": {
+    "schema": {
+      "type": "string",
+      "const": "agent_jit.capability_version"
+    },
+    "version": {
+      "type": "integer",
+      "const": 1
+    },
+    "id": {
+      "$ref": "#/$defs/CapabilityId"
+    },
+    "provenance": {
+      "$ref": "#/$defs/Provenance"
+    },
+    "body": {
+      "$ref": "#/$defs/CapabilityVersion"
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "version",
+    "id",
+    "provenance",
+    "body"
+  ],
+  "$defs": {
+    "CapabilityVersion": {
+      "description": "An immutable, approved capability version.",
+      "type": "object",
+      "properties": {
+        "workflow_id": {
+          "description": "Workflow this version executes.",
+          "$ref": "#/$defs/WorkflowId"
+        },
+        "name": {
+          "description": "Capability name exposed through routing.",
+          "type": "string"
+        },
+        "version": {
+          "description": "Monotonic version number within the capability name.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "state": {
+          "description": "Lifecycle position.",
+          "$ref": "#/$defs/LifecycleState"
+        },
+        "fingerprint_digest": {
+          "description": "Digest of the repository and dependency fingerprints this version was validated against.",
+          "$ref": "#/$defs/Digest"
+        },
+        "replay_digests": {
+          "description": "Digests of the replay results that justified approval, in a stable order.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Digest"
+          }
+        },
+        "approved_by": {
+          "description": "Operator identity that approved the version, as recorded locally.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "workflow_id",
+        "name",
+        "version",
+        "state",
+        "fingerprint_digest",
+        "replay_digests"
+      ]
+    },
+    "WorkflowId": {
+      "description": "Identifier for a Workflow record.",
+      "type": "string",
+      "pattern": "^wfl_[0-9A-HJKMNP-TV-Z]{26}$"
+    },
+    "LifecycleState": {
+      "description": "A position in the capability lifecycle.",
+      "oneOf": [
+        {
+          "description": "Runs have been recorded but nothing has been grouped yet.",
+          "type": "string",
+          "const": "observed"
+        },
+        {
+          "description": "A human grouped runs and a candidate contract exists.",
+          "type": "string",
+          "const": "proposed"
+        },
+        {
+          "description": "The candidate is compiled and being replayed against historical fixtures.",
+          "type": "string",
+          "const": "validating"
+        },
+        {
+          "description": "Replay passed and the evidence has been accepted by a human.",
+          "type": "string",
+          "const": "approved"
+        },
+        {
+          "description": "The capability is enabled and eligible for routing.",
+          "type": "string",
+          "const": "active"
+        },
+        {
+          "description": "The capability failed a runtime check and is temporarily ineligible.",
+          "type": "string",
+          "const": "degraded"
+        },
+        {
+          "description": "The capability is permanently out of service.",
+          "type": "string",
+          "const": "retired"
+        }
+      ]
+    },
+    "Digest": {
+      "description": "BLAKE3 digest of a canonical JSON byte string, lowercase hex.",
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "CapabilityId": {
+      "description": "Identifier for a Capability record.",
+      "type": "string",
+      "pattern": "^cap_[0-9A-HJKMNP-TV-Z]{26}$"
+    },
+    "Provenance": {
+      "description": "Provenance recorded alongside every envelope.",
+      "type": "object",
+      "properties": {
+        "produced_by": {
+          "description": "Name and version of the component that produced the record, e.g. `agent-jit/0.1.0`.",
+          "type": "string"
+        },
+        "source": {
+          "description": "How the record entered the system.",
+          "$ref": "#/$defs/ProvenanceSource"
+        },
+        "recorded_at_unix_ms": {
+          "description": "Wall-clock time the record was produced. Volatile: never part of a digest.",
+          "type": "integer",
+          "format": "int64"
+        },
+        "parents": {
+          "description": "Digests of the records this one was derived from, in a stable order.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Digest"
+          },
+          "default": []
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "produced_by",
+        "source",
+        "recorded_at_unix_ms"
+      ]
+    },
+    "ProvenanceSource": {
+      "description": "How a record entered the system.",
+      "oneOf": [
+        {
+          "description": "Captured live from agent hooks.",
+          "type": "string",
+          "const": "recorded"
+        },
+        {
+          "description": "Imported from an exact-shape historical record.",
+          "type": "string",
+          "const": "imported"
+        },
+        {
+          "description": "Derived from other records already in the store.",
+          "type": "string",
+          "const": "derived"
+        },
+        {
+          "description": "Confirmed by a human operator.",
+          "type": "string",
+          "const": "confirmed"
+        }
+      ]
+    }
+  }
+}

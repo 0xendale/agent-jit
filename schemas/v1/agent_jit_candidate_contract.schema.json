@@ -1,0 +1,326 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Envelope_CandidateContract",
+  "type": "object",
+  "properties": {
+    "schema": {
+      "type": "string",
+      "const": "agent_jit.candidate_contract"
+    },
+    "version": {
+      "type": "integer",
+      "const": 1
+    },
+    "id": {
+      "$ref": "#/$defs/CandidateId"
+    },
+    "provenance": {
+      "$ref": "#/$defs/Provenance"
+    },
+    "body": {
+      "$ref": "#/$defs/CandidateContract"
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "version",
+    "id",
+    "provenance",
+    "body"
+  ],
+  "$defs": {
+    "CandidateContract": {
+      "description": "A candidate capability contract confirmed by a human.",
+      "type": "object",
+      "properties": {
+        "group_id": {
+          "description": "Group the candidate was inferred from.",
+          "$ref": "#/$defs/GroupId"
+        },
+        "name": {
+          "description": "Capability name, e.g. `validate_change`.",
+          "type": "string"
+        },
+        "inputs": {
+          "description": "Typed inputs.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ParameterSpec"
+          }
+        },
+        "outputs": {
+          "description": "Typed outputs.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ParameterSpec"
+          }
+        },
+        "preconditions": {
+          "description": "Preconditions that must hold before the capability may run.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "projected": {
+          "description": "Projected value used for ranking and the break-even gate.",
+          "$ref": "#/$defs/ProjectedValue"
+        },
+        "state": {
+          "description": "Lifecycle position of the candidate.",
+          "$ref": "#/$defs/LifecycleState"
+        },
+        "confirmed_by_human": {
+          "description": "Whether a human confirmed the inferred contract verbatim.",
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "group_id",
+        "name",
+        "inputs",
+        "outputs",
+        "preconditions",
+        "projected",
+        "state",
+        "confirmed_by_human"
+      ]
+    },
+    "GroupId": {
+      "description": "Identifier for a Group record.",
+      "type": "string",
+      "pattern": "^grp_[0-9A-HJKMNP-TV-Z]{26}$"
+    },
+    "ParameterSpec": {
+      "description": "One typed input or output of a candidate capability.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "description": "Parameter name as it appears in the capability contract.",
+          "type": "string"
+        },
+        "value_type": {
+          "description": "Type of the value.",
+          "$ref": "#/$defs/ValueType"
+        },
+        "required": {
+          "description": "Whether the caller must supply the value.",
+          "type": "boolean"
+        },
+        "constant_value": {
+          "description": "Value observed in every grouped run, when the parameter was constant.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "description": {
+          "description": "What the parameter means, for the enable card.",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "value_type",
+        "required",
+        "description"
+      ]
+    },
+    "ValueType": {
+      "description": "The type of a candidate parameter or result field.",
+      "oneOf": [
+        {
+          "description": "A UTF-8 string.",
+          "type": "string",
+          "const": "string"
+        },
+        {
+          "description": "A signed integer.",
+          "type": "string",
+          "const": "integer"
+        },
+        {
+          "description": "A boolean.",
+          "type": "string",
+          "const": "boolean"
+        },
+        {
+          "description": "A Git revision such as `HEAD~1`.",
+          "type": "string",
+          "const": "git_revision"
+        },
+        {
+          "description": "A repository-relative path.",
+          "type": "string",
+          "const": "repo_path"
+        },
+        {
+          "description": "A list of repository-relative paths.",
+          "type": "string",
+          "const": "repo_path_list"
+        }
+      ]
+    },
+    "ProjectedValue": {
+      "description": "Projected value of compiling a candidate, in integers only.",
+      "type": "object",
+      "properties": {
+        "observed_uses": {
+          "description": "How many grouped runs the candidate covers.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "median_tool_calls": {
+          "description": "Median tool calls per observed run.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "median_input_tokens": {
+          "description": "Median estimated input tokens per observed run.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "median_duration_ms": {
+          "description": "Median duration per observed run.",
+          "type": "integer",
+          "format": "int64"
+        },
+        "compile_cost_uses": {
+          "description": "Estimated one-off cost of compiling and validating, in equivalent uses.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "break_even_uses": {
+          "description": "Uses required before the candidate pays for itself.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "observed_uses",
+        "median_tool_calls",
+        "median_input_tokens",
+        "median_duration_ms",
+        "compile_cost_uses",
+        "break_even_uses"
+      ]
+    },
+    "LifecycleState": {
+      "description": "A position in the capability lifecycle.",
+      "oneOf": [
+        {
+          "description": "Runs have been recorded but nothing has been grouped yet.",
+          "type": "string",
+          "const": "observed"
+        },
+        {
+          "description": "A human grouped runs and a candidate contract exists.",
+          "type": "string",
+          "const": "proposed"
+        },
+        {
+          "description": "The candidate is compiled and being replayed against historical fixtures.",
+          "type": "string",
+          "const": "validating"
+        },
+        {
+          "description": "Replay passed and the evidence has been accepted by a human.",
+          "type": "string",
+          "const": "approved"
+        },
+        {
+          "description": "The capability is enabled and eligible for routing.",
+          "type": "string",
+          "const": "active"
+        },
+        {
+          "description": "The capability failed a runtime check and is temporarily ineligible.",
+          "type": "string",
+          "const": "degraded"
+        },
+        {
+          "description": "The capability is permanently out of service.",
+          "type": "string",
+          "const": "retired"
+        }
+      ]
+    },
+    "CandidateId": {
+      "description": "Identifier for a Candidate record.",
+      "type": "string",
+      "pattern": "^cnd_[0-9A-HJKMNP-TV-Z]{26}$"
+    },
+    "Provenance": {
+      "description": "Provenance recorded alongside every envelope.",
+      "type": "object",
+      "properties": {
+        "produced_by": {
+          "description": "Name and version of the component that produced the record, e.g. `agent-jit/0.1.0`.",
+          "type": "string"
+        },
+        "source": {
+          "description": "How the record entered the system.",
+          "$ref": "#/$defs/ProvenanceSource"
+        },
+        "recorded_at_unix_ms": {
+          "description": "Wall-clock time the record was produced. Volatile: never part of a digest.",
+          "type": "integer",
+          "format": "int64"
+        },
+        "parents": {
+          "description": "Digests of the records this one was derived from, in a stable order.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Digest"
+          },
+          "default": []
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "produced_by",
+        "source",
+        "recorded_at_unix_ms"
+      ]
+    },
+    "ProvenanceSource": {
+      "description": "How a record entered the system.",
+      "oneOf": [
+        {
+          "description": "Captured live from agent hooks.",
+          "type": "string",
+          "const": "recorded"
+        },
+        {
+          "description": "Imported from an exact-shape historical record.",
+          "type": "string",
+          "const": "imported"
+        },
+        {
+          "description": "Derived from other records already in the store.",
+          "type": "string",
+          "const": "derived"
+        },
+        {
+          "description": "Confirmed by a human operator.",
+          "type": "string",
+          "const": "confirmed"
+        }
+      ]
+    },
+    "Digest": {
+      "description": "BLAKE3 digest of a canonical JSON byte string, lowercase hex.",
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    }
+  }
+}

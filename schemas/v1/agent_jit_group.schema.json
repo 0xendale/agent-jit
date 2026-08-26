@@ -1,0 +1,149 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Envelope_Group",
+  "type": "object",
+  "properties": {
+    "schema": {
+      "type": "string",
+      "const": "agent_jit.group"
+    },
+    "version": {
+      "type": "integer",
+      "const": 1
+    },
+    "id": {
+      "$ref": "#/$defs/GroupId"
+    },
+    "provenance": {
+      "$ref": "#/$defs/Provenance"
+    },
+    "body": {
+      "$ref": "#/$defs/Group"
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "version",
+    "id",
+    "provenance",
+    "body"
+  ],
+  "$defs": {
+    "Group": {
+      "description": "A human-confirmed set of trajectories that solved the same intent.",
+      "type": "object",
+      "properties": {
+        "repository_id": {
+          "description": "Repository the group belongs to.",
+          "$ref": "#/$defs/RepositoryId"
+        },
+        "intent_label": {
+          "description": "Short label the operator gave the shared intent.",
+          "type": "string"
+        },
+        "members": {
+          "description": "Members, sorted so the manifest digest does not depend on selection order.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/TrajectoryId"
+          }
+        },
+        "rationale": {
+          "description": "Free-text rationale the operator recorded when confirming the group.",
+          "type": "string"
+        },
+        "manifest_digest": {
+          "description": "Digest of the member set, making the manifest immutable once confirmed.",
+          "$ref": "#/$defs/Digest"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "repository_id",
+        "intent_label",
+        "members",
+        "rationale",
+        "manifest_digest"
+      ]
+    },
+    "RepositoryId": {
+      "description": "Identifier for a Repository record.",
+      "type": "string",
+      "pattern": "^rep_[0-9A-HJKMNP-TV-Z]{26}$"
+    },
+    "TrajectoryId": {
+      "description": "Identifier for a Trajectory record.",
+      "type": "string",
+      "pattern": "^trj_[0-9A-HJKMNP-TV-Z]{26}$"
+    },
+    "Digest": {
+      "description": "BLAKE3 digest of a canonical JSON byte string, lowercase hex.",
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "GroupId": {
+      "description": "Identifier for a Group record.",
+      "type": "string",
+      "pattern": "^grp_[0-9A-HJKMNP-TV-Z]{26}$"
+    },
+    "Provenance": {
+      "description": "Provenance recorded alongside every envelope.",
+      "type": "object",
+      "properties": {
+        "produced_by": {
+          "description": "Name and version of the component that produced the record, e.g. `agent-jit/0.1.0`.",
+          "type": "string"
+        },
+        "source": {
+          "description": "How the record entered the system.",
+          "$ref": "#/$defs/ProvenanceSource"
+        },
+        "recorded_at_unix_ms": {
+          "description": "Wall-clock time the record was produced. Volatile: never part of a digest.",
+          "type": "integer",
+          "format": "int64"
+        },
+        "parents": {
+          "description": "Digests of the records this one was derived from, in a stable order.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Digest"
+          },
+          "default": []
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "produced_by",
+        "source",
+        "recorded_at_unix_ms"
+      ]
+    },
+    "ProvenanceSource": {
+      "description": "How a record entered the system.",
+      "oneOf": [
+        {
+          "description": "Captured live from agent hooks.",
+          "type": "string",
+          "const": "recorded"
+        },
+        {
+          "description": "Imported from an exact-shape historical record.",
+          "type": "string",
+          "const": "imported"
+        },
+        {
+          "description": "Derived from other records already in the store.",
+          "type": "string",
+          "const": "derived"
+        },
+        {
+          "description": "Confirmed by a human operator.",
+          "type": "string",
+          "const": "confirmed"
+        }
+      ]
+    }
+  }
+}

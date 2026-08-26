@@ -1,0 +1,21 @@
+{
+  "schema": "agent_jit.trajectory",
+  "version": 1,
+  "id": "trj_01J0000000000000000000000A",
+  "provenance": {
+    "produced_by": "agent-jit/0.1.0",
+    "source": "recorded",
+    "recorded_at_unix_ms": 1756000000000,
+    "parents": []
+  },
+  "body": {
+    "session_id": "ses_01J0000000000000000000000S",
+    "repository_id": "rep_01J0000000000000000000000R",
+    "head_commit": "0000000000000000000000000000000000000000",
+    "intent": "validate this change the way this repository expects",
+    "events": [],
+    "outcome_id": null,
+    "started_at_unix_ms": 1756000000000,
+    "duration_ms": 42.5
+  }
+}

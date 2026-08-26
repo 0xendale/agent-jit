@@ -1,0 +1,216 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Envelope_Event",
+  "type": "object",
+  "properties": {
+    "schema": {
+      "type": "string",
+      "const": "agent_jit.event"
+    },
+    "version": {
+      "type": "integer",
+      "const": 1
+    },
+    "id": {
+      "$ref": "#/$defs/EventId"
+    },
+    "provenance": {
+      "$ref": "#/$defs/Provenance"
+    },
+    "body": {
+      "$ref": "#/$defs/Event"
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "version",
+    "id",
+    "provenance",
+    "body"
+  ],
+  "$defs": {
+    "Event": {
+      "description": "One recorded event inside a session.\n\nPayloads are redacted and bounded before they reach this type: the event stores digests and\nbyte counts rather than raw output, so a trace can be compared without retaining tool output\nverbatim.",
+      "type": "object",
+      "properties": {
+        "session_id": {
+          "description": "Session the event belongs to.",
+          "$ref": "#/$defs/SessionId"
+        },
+        "sequence": {
+          "description": "Monotonic position within the session, starting at zero.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "kind": {
+          "description": "Kind of observation.",
+          "$ref": "#/$defs/EventKind"
+        },
+        "tool_name": {
+          "description": "Tool name for tool events, absent otherwise.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "argv": {
+          "description": "Redacted argument vector, one element per argument; never a shell string.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        },
+        "exit_code": {
+          "description": "Process exit status for tool results that ran a process.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32"
+        },
+        "payload_digest": {
+          "description": "Digest of the redacted, bounded payload.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Digest"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "payload_bytes": {
+          "description": "Size of the payload before bounding, in bytes.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "payload_truncated": {
+          "description": "Whether the payload was truncated to respect the output cap.",
+          "type": "boolean"
+        },
+        "started_at_unix_ms": {
+          "description": "Wall-clock start. Volatile: excluded from the digest.",
+          "type": "integer",
+          "format": "int64"
+        },
+        "duration_ms": {
+          "description": "Observed duration. Volatile: excluded from the digest.",
+          "type": "integer",
+          "format": "int64"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "session_id",
+        "sequence",
+        "kind",
+        "payload_bytes",
+        "payload_truncated",
+        "started_at_unix_ms",
+        "duration_ms"
+      ]
+    },
+    "SessionId": {
+      "description": "Identifier for a Session record.",
+      "type": "string",
+      "pattern": "^ses_[0-9A-HJKMNP-TV-Z]{26}$"
+    },
+    "EventKind": {
+      "description": "What kind of observation an event carries.",
+      "oneOf": [
+        {
+          "description": "The user stated an intent.",
+          "type": "string",
+          "const": "user_prompt"
+        },
+        {
+          "description": "The agent invoked a tool.",
+          "type": "string",
+          "const": "tool_call"
+        },
+        {
+          "description": "A tool returned a result.",
+          "type": "string",
+          "const": "tool_result"
+        },
+        {
+          "description": "The agent produced a message.",
+          "type": "string",
+          "const": "agent_message"
+        }
+      ]
+    },
+    "Digest": {
+      "description": "BLAKE3 digest of a canonical JSON byte string, lowercase hex.",
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "EventId": {
+      "description": "Identifier for a Event record.",
+      "type": "string",
+      "pattern": "^evt_[0-9A-HJKMNP-TV-Z]{26}$"
+    },
+    "Provenance": {
+      "description": "Provenance recorded alongside every envelope.",
+      "type": "object",
+      "properties": {
+        "produced_by": {
+          "description": "Name and version of the component that produced the record, e.g. `agent-jit/0.1.0`.",
+          "type": "string"
+        },
+        "source": {
+          "description": "How the record entered the system.",
+          "$ref": "#/$defs/ProvenanceSource"
+        },
+        "recorded_at_unix_ms": {
+          "description": "Wall-clock time the record was produced. Volatile: never part of a digest.",
+          "type": "integer",
+          "format": "int64"
+        },
+        "parents": {
+          "description": "Digests of the records this one was derived from, in a stable order.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Digest"
+          },
+          "default": []
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "produced_by",
+        "source",
+        "recorded_at_unix_ms"
+      ]
+    },
+    "ProvenanceSource": {
+      "description": "How a record entered the system.",
+      "oneOf": [
+        {
+          "description": "Captured live from agent hooks.",
+          "type": "string",
+          "const": "recorded"
+        },
+        {
+          "description": "Imported from an exact-shape historical record.",
+          "type": "string",
+          "const": "imported"
+        },
+        {
+          "description": "Derived from other records already in the store.",
+          "type": "string",
+          "const": "derived"
+        },
+        {
+          "description": "Confirmed by a human operator.",
+          "type": "string",
+          "const": "confirmed"
+        }
+      ]
+    }
+  }
+}

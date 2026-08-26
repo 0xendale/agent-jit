@@ -1,0 +1,195 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Envelope_ReplayResult",
+  "type": "object",
+  "properties": {
+    "schema": {
+      "type": "string",
+      "const": "agent_jit.replay_result"
+    },
+    "version": {
+      "type": "integer",
+      "const": 1
+    },
+    "id": {
+      "$ref": "#/$defs/ReplayId"
+    },
+    "provenance": {
+      "$ref": "#/$defs/Provenance"
+    },
+    "body": {
+      "$ref": "#/$defs/ReplayResult"
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "version",
+    "id",
+    "provenance",
+    "body"
+  ],
+  "$defs": {
+    "ReplayResult": {
+      "description": "One replay of a compiled workflow against one historical fixture.",
+      "type": "object",
+      "properties": {
+        "workflow_id": {
+          "description": "Workflow that was replayed.",
+          "$ref": "#/$defs/WorkflowId"
+        },
+        "fixture_trajectory_id": {
+          "description": "Historical trajectory used as the fixture.",
+          "$ref": "#/$defs/TrajectoryId"
+        },
+        "verdict": {
+          "description": "Verdict of the comparison.",
+          "$ref": "#/$defs/ReplayVerdict"
+        },
+        "comparator": {
+          "description": "Identifier of the deterministic comparator that produced the verdict.",
+          "type": "string"
+        },
+        "reason": {
+          "description": "Reason text when the verdict is not `match`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "observed_digest": {
+          "description": "Digest of the observed output, for provenance.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Digest"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "expected_digest": {
+          "description": "Digest of the expected output derived from the historical run.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Digest"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "deterministic": {
+          "description": "Whether repeated runs produced identical results.",
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "workflow_id",
+        "fixture_trajectory_id",
+        "verdict",
+        "comparator",
+        "deterministic"
+      ]
+    },
+    "WorkflowId": {
+      "description": "Identifier for a Workflow record.",
+      "type": "string",
+      "pattern": "^wfl_[0-9A-HJKMNP-TV-Z]{26}$"
+    },
+    "TrajectoryId": {
+      "description": "Identifier for a Trajectory record.",
+      "type": "string",
+      "pattern": "^trj_[0-9A-HJKMNP-TV-Z]{26}$"
+    },
+    "ReplayVerdict": {
+      "description": "Why a replay did not match.",
+      "oneOf": [
+        {
+          "description": "Semantic outputs matched the historical run.",
+          "type": "string",
+          "const": "match"
+        },
+        {
+          "description": "Outputs differed; the capability may not be activated.",
+          "type": "string",
+          "const": "mismatch"
+        },
+        {
+          "description": "The replay could not run, for example because the sandbox was unavailable.",
+          "type": "string",
+          "const": "not_run"
+        }
+      ]
+    },
+    "Digest": {
+      "description": "BLAKE3 digest of a canonical JSON byte string, lowercase hex.",
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "ReplayId": {
+      "description": "Identifier for a Replay record.",
+      "type": "string",
+      "pattern": "^rpl_[0-9A-HJKMNP-TV-Z]{26}$"
+    },
+    "Provenance": {
+      "description": "Provenance recorded alongside every envelope.",
+      "type": "object",
+      "properties": {
+        "produced_by": {
+          "description": "Name and version of the component that produced the record, e.g. `agent-jit/0.1.0`.",
+          "type": "string"
+        },
+        "source": {
+          "description": "How the record entered the system.",
+          "$ref": "#/$defs/ProvenanceSource"
+        },
+        "recorded_at_unix_ms": {
+          "description": "Wall-clock time the record was produced. Volatile: never part of a digest.",
+          "type": "integer",
+          "format": "int64"
+        },
+        "parents": {
+          "description": "Digests of the records this one was derived from, in a stable order.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Digest"
+          },
+          "default": []
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "produced_by",
+        "source",
+        "recorded_at_unix_ms"
+      ]
+    },
+    "ProvenanceSource": {
+      "description": "How a record entered the system.",
+      "oneOf": [
+        {
+          "description": "Captured live from agent hooks.",
+          "type": "string",
+          "const": "recorded"
+        },
+        {
+          "description": "Imported from an exact-shape historical record.",
+          "type": "string",
+          "const": "imported"
+        },
+        {
+          "description": "Derived from other records already in the store.",
+          "type": "string",
+          "const": "derived"
+        },
+        {
+          "description": "Confirmed by a human operator.",
+          "type": "string",
+          "const": "confirmed"
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,148 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Envelope_Workflow",
+  "type": "object",
+  "properties": {
+    "schema": {
+      "type": "string",
+      "const": "agent_jit.workflow"
+    },
+    "version": {
+      "type": "integer",
+      "const": 1
+    },
+    "id": {
+      "$ref": "#/$defs/WorkflowId"
+    },
+    "provenance": {
+      "$ref": "#/$defs/Provenance"
+    },
+    "body": {
+      "$ref": "#/$defs/Workflow"
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "version",
+    "id",
+    "provenance",
+    "body"
+  ],
+  "$defs": {
+    "Workflow": {
+      "description": "A compiled typed DAG built from the fixed read-only primitive allowlist.",
+      "type": "object",
+      "properties": {
+        "candidate_id": {
+          "description": "Candidate contract this workflow implements.",
+          "$ref": "#/$defs/CandidateId"
+        },
+        "ir_version": {
+          "description": "Version of the IR grammar the workflow was compiled against.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "ir_digest": {
+          "description": "Digest of the canonical IR document.",
+          "$ref": "#/$defs/Digest"
+        },
+        "primitives": {
+          "description": "Primitive identifiers used by the workflow, sorted and deduplicated.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "node_count": {
+          "description": "Number of nodes in the DAG, used for cheap sanity checks in reports.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "candidate_id",
+        "ir_version",
+        "ir_digest",
+        "primitives",
+        "node_count"
+      ]
+    },
+    "CandidateId": {
+      "description": "Identifier for a Candidate record.",
+      "type": "string",
+      "pattern": "^cnd_[0-9A-HJKMNP-TV-Z]{26}$"
+    },
+    "Digest": {
+      "description": "BLAKE3 digest of a canonical JSON byte string, lowercase hex.",
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "WorkflowId": {
+      "description": "Identifier for a Workflow record.",
+      "type": "string",
+      "pattern": "^wfl_[0-9A-HJKMNP-TV-Z]{26}$"
+    },
+    "Provenance": {
+      "description": "Provenance recorded alongside every envelope.",
+      "type": "object",
+      "properties": {
+        "produced_by": {
+          "description": "Name and version of the component that produced the record, e.g. `agent-jit/0.1.0`.",
+          "type": "string"
+        },
+        "source": {
+          "description": "How the record entered the system.",
+          "$ref": "#/$defs/ProvenanceSource"
+        },
+        "recorded_at_unix_ms": {
+          "description": "Wall-clock time the record was produced. Volatile: never part of a digest.",
+          "type": "integer",
+          "format": "int64"
+        },
+        "parents": {
+          "description": "Digests of the records this one was derived from, in a stable order.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Digest"
+          },
+          "default": []
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "produced_by",
+        "source",
+        "recorded_at_unix_ms"
+      ]
+    },
+    "ProvenanceSource": {
+      "description": "How a record entered the system.",
+      "oneOf": [
+        {
+          "description": "Captured live from agent hooks.",
+          "type": "string",
+          "const": "recorded"
+        },
+        {
+          "description": "Imported from an exact-shape historical record.",
+          "type": "string",
+          "const": "imported"
+        },
+        {
+          "description": "Derived from other records already in the store.",
+          "type": "string",
+          "const": "derived"
+        },
+        {
+          "description": "Confirmed by a human operator.",
+          "type": "string",
+          "const": "confirmed"
+        }
+      ]
+    }
+  }
+}
