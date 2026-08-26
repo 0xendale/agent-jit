@@ -34,7 +34,7 @@ const RESERVED: &[&str] = &[
 ];
 
 /// Commands that already do something; the rest must report `not_implemented`.
-const IMPLEMENTED: &[&str] = &["paths", "doctor", "schema", "repo"];
+const IMPLEMENTED: &[&str] = &["paths", "doctor", "schema", "repo", "store"];
 
 fn bin(home: &Path) -> Command {
     let mut command = Command::cargo_bin("agent-jit").unwrap();

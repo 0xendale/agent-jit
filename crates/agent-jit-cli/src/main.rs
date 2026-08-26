@@ -12,6 +12,7 @@ mod error;
 mod output;
 mod repo;
 mod schema;
+mod store;
 
 use error::{CommandError, ExitClass};
 use output::Rendered;
@@ -85,6 +86,7 @@ fn run(args: &[String]) -> Result<Rendered, CommandError> {
         "doctor" => doctor::run(&args[1..]),
         "schema" => schema::run(&args[1..]),
         "repo" => repo::run(&args[1..]),
+        "store" => store::run(&args[1..]),
         reserved if COMMANDS.iter().any(|(name, _)| *name == reserved) => {
             Err(CommandError::not_implemented(reserved))
         }
