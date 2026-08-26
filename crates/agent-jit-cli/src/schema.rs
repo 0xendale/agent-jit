@@ -5,7 +5,8 @@ use std::path::Path;
 
 use agent_jit_domain::schema::{generated_schemas, validate_document};
 
-use crate::CommandError;
+use crate::error::CommandError;
+use crate::output::Rendered;
 
 const USAGE: &str = "usage: agent-jit schema <generate --out <dir> | validate <file>>";
 
@@ -14,7 +15,7 @@ const USAGE: &str = "usage: agent-jit schema <generate --out <dir> | validate <f
 /// # Errors
 ///
 /// Returns a [`CommandError`] when arguments are missing or the document is refused.
-pub fn run(args: &[String]) -> Result<String, CommandError> {
+pub fn run(args: &[String]) -> Result<Rendered, CommandError> {
     match args.first().map(String::as_str) {
         Some("generate") => generate(&args[1..]),
         Some("validate") => validate(&args[1..]),
@@ -26,7 +27,7 @@ pub fn run(args: &[String]) -> Result<String, CommandError> {
 }
 
 /// Writes every generated schema into the requested directory.
-fn generate(args: &[String]) -> Result<String, CommandError> {
+fn generate(args: &[String]) -> Result<Rendered, CommandError> {
     let out = match args {
         [flag, directory] if flag == "--out" => directory.clone(),
         _ => {
@@ -53,11 +54,11 @@ fn generate(args: &[String]) -> Result<String, CommandError> {
     for schema in &schemas {
         let _ = writeln!(rendered, "  {} v{}", schema.schema_name, schema.version);
     }
-    Ok(rendered)
+    Ok(Rendered::Text(rendered))
 }
 
 /// Validates one stored document against the contract it claims to implement.
-fn validate(args: &[String]) -> Result<String, CommandError> {
+fn validate(args: &[String]) -> Result<Rendered, CommandError> {
     let [path] = args else {
         return Err(CommandError::usage(
             "usage: agent-jit schema validate <file>",
@@ -73,8 +74,8 @@ fn validate(args: &[String]) -> Result<String, CommandError> {
     let validated = validate_document(&document)
         .map_err(|error| CommandError::refused(error.code(), error.to_string()))?;
 
-    Ok(format!(
+    Ok(Rendered::Text(format!(
         "{} v{} {} {}\n",
         validated.schema_name, validated.version, validated.id, validated.digest
-    ))
+    )))
 }

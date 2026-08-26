@@ -6,7 +6,8 @@ use agent_jit_engine::host::HostSupport;
 use agent_jit_engine::process::ProcessRunner;
 use agent_jit_engine::repository::discover;
 
-use crate::CommandError;
+use crate::error::CommandError;
+use crate::output::Rendered;
 
 const USAGE: &str = "usage: agent-jit repo inspect --root <path> [--json]";
 
@@ -15,7 +16,7 @@ const USAGE: &str = "usage: agent-jit repo inspect --root <path> [--json]";
 /// # Errors
 ///
 /// Returns a [`CommandError`] when arguments are missing or the repository is refused.
-pub fn run(args: &[String]) -> Result<String, CommandError> {
+pub fn run(args: &[String]) -> Result<Rendered, CommandError> {
     match args.first().map(String::as_str) {
         Some("inspect") => inspect(&args[1..]),
         Some(other) => Err(CommandError::usage(format!(
@@ -26,7 +27,7 @@ pub fn run(args: &[String]) -> Result<String, CommandError> {
 }
 
 /// Reports the identity of the repository containing `--root`.
-fn inspect(args: &[String]) -> Result<String, CommandError> {
+fn inspect(args: &[String]) -> Result<Rendered, CommandError> {
     let mut root: Option<&str> = None;
     let mut as_json = false;
 
@@ -62,14 +63,10 @@ fn inspect(args: &[String]) -> Result<String, CommandError> {
     });
 
     if as_json {
-        let mut rendered = serde_json::to_string_pretty(&report).map_err(|error| {
-            CommandError::refused("repo_report_unrenderable", error.to_string())
-        })?;
-        rendered.push('\n');
-        return Ok(rendered);
+        return Ok(Rendered::Json(report));
     }
 
-    Ok(format!(
+    Ok(Rendered::Text(format!(
         "repo_id        {}\n\
          worktree_root  {}\n\
          git_common_dir {}\n\
@@ -81,5 +78,5 @@ fn inspect(args: &[String]) -> Result<String, CommandError> {
         identity.head_commit,
         host.os,
         host.arch,
-    ))
+    )))
 }
