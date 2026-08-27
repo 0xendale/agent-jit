@@ -1,5 +1,10 @@
 //! `agent-jit store` — migrate the private database and check its health.
 
+use std::path::Path;
+
+use agent_jit_engine::process::ProcessRunner;
+use agent_jit_engine::recorder::{Recorder, SegmentStore, finalize};
+use agent_jit_engine::repository::discover;
 use agent_jit_store::{CURRENT_SCHEMA_VERSION, Store, StorePath};
 use serde_json::json;
 
@@ -7,7 +12,10 @@ use crate::app::AppPaths;
 use crate::error::{CommandError, ExitClass};
 use crate::output::Rendered;
 
-const USAGE: &str = "usage: agent-jit store <migrate | check> [--json]";
+const USAGE: &str = "usage: agent-jit store <migrate | check | recover> [--json]";
+
+/// Recorder version stamped on records this build writes.
+const RECORDER_VERSION: &str = concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"));
 
 /// Dispatches a `store` subcommand.
 ///
@@ -23,6 +31,7 @@ pub fn run(args: &[String]) -> Result<Rendered, CommandError> {
     match subcommand.as_str() {
         "migrate" => migrate(as_json),
         "check" => check(as_json),
+        "recover" => recover(as_json),
         other => Err(CommandError::usage(format!(
             "unknown store subcommand: {other}\n{USAGE}"
         ))),
@@ -106,5 +115,101 @@ fn check(as_json: bool) -> Result<Rendered, CommandError> {
          foreign_key_violations {}\n\
          healthy                {}\n",
         health.schema_version, health.integrity, health.foreign_key_violations, health.healthy
+    )))
+}
+
+/// Drains the spool: finalizes every complete session and reports what is still open.
+///
+/// Recovery is safe to run at any time, including after a crash. Sessions that are still open are
+/// left alone; sessions that ended are written once — finalization derives its identifiers from
+/// content, so running recovery twice converges rather than duplicating.
+fn recover(as_json: bool) -> Result<Rendered, CommandError> {
+    let paths = AppPaths::resolve()?;
+    paths.ensure()?;
+
+    let mut store = open()?;
+    if store.schema_version().map_err(|error| refusal(&error))? == 0 {
+        return Err(CommandError::new(
+            "store_not_migrated",
+            "the database has not been migrated; run `agent-jit store migrate`",
+            ExitClass::SafetyRefusal,
+        ));
+    }
+
+    let segments = SegmentStore::open(&paths.spool.join("segments")).map_err(|error| {
+        CommandError::new(error.code(), error.to_string(), ExitClass::SafetyRefusal)
+    })?;
+    let recorder = Recorder::new(segments.clone());
+
+    let sessions = segments.sessions().map_err(|error| {
+        CommandError::new(error.code(), error.to_string(), ExitClass::SafetyRefusal)
+    })?;
+
+    let mut recovered = Vec::new();
+    let mut pending = Vec::new();
+    let mut quarantined = 0_u32;
+    let mut skipped = Vec::new();
+
+    for session_key in sessions {
+        let aggregate = match recorder.aggregate(&session_key) {
+            Ok(aggregate) => aggregate,
+            Err(error) => {
+                skipped.push(json!({"session": session_key, "code": error.code()}));
+                continue;
+            }
+        };
+        quarantined = quarantined
+            .saturating_add(u32::try_from(aggregate.quarantined.len()).unwrap_or(u32::MAX));
+
+        if !aggregate.complete {
+            pending.push(json!({
+                "session": session_key,
+                "events": aggregate.events.len(),
+                "turns": aggregate.turns,
+            }));
+            continue;
+        }
+
+        let identity = match discover(&ProcessRunner::new(), Path::new(&aggregate.cwd)) {
+            Ok(identity) => identity,
+            Err(error) => {
+                skipped.push(json!({"session": session_key, "code": error.code()}));
+                continue;
+            }
+        };
+
+        let report =
+            finalize(&mut store, &aggregate, &identity, RECORDER_VERSION).map_err(|error| {
+                CommandError::new(error.code(), error.to_string(), ExitClass::Internal)
+            })?;
+
+        recovered.push(json!({
+            "session": session_key,
+            "trajectory_id": report.trajectory_id.to_string(),
+            "events_written": report.events_written,
+            "created": report.created,
+        }));
+
+        segments.discard_session(&session_key).map_err(|error| {
+            CommandError::new(error.code(), error.to_string(), ExitClass::Internal)
+        })?;
+    }
+
+    let report = json!({
+        "recovered": recovered,
+        "pending": pending,
+        "skipped": skipped,
+        "quarantined_segments": quarantined,
+    });
+
+    if as_json {
+        return Ok(Rendered::Json(report));
+    }
+    Ok(Rendered::Text(format!(
+        "recovered {} session(s), {} still open, {} skipped, {} quarantined segment(s)\n",
+        recovered.len(),
+        pending.len(),
+        skipped.len(),
+        quarantined
     )))
 }

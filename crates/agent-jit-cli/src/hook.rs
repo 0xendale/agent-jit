@@ -13,6 +13,7 @@ use std::io::{self, Write as _};
 use agent_jit_domain::redaction::{PathAliases, Redactor};
 use agent_jit_engine::adapters::claude_hooks::{HookEventKind, normalize};
 use agent_jit_engine::normalize::read_bounded;
+use agent_jit_engine::recorder::SegmentStore;
 use agent_jit_engine::spool::{Spool, SpoolKind};
 use serde_json::json;
 
@@ -49,8 +50,10 @@ fn ingest(args: &[String]) -> Result<Rendered, CommandError> {
     paths.ensure()?;
     let spool = Spool::open(&paths.spool)
         .map_err(|error| CommandError::refused(error.code(), error.to_string()))?;
+    let segments = SegmentStore::open(&paths.spool.join("segments"))
+        .map_err(|error| CommandError::refused(error.code(), error.to_string()))?;
 
-    match capture(kind, claude_version.as_deref(), &spool) {
+    match capture(kind, claude_version.as_deref(), &segments) {
         Ok(()) => Ok(Rendered::Text(String::new())),
         Err(fault) => {
             // Record the fault, tell the operator on stderr, and let Claude carry on.
@@ -77,7 +80,11 @@ struct Fault {
 }
 
 /// Reads, normalizes, and spools one event.
-fn capture(kind: HookEventKind, claude_version: Option<&str>, spool: &Spool) -> Result<(), Fault> {
+fn capture(
+    kind: HookEventKind,
+    claude_version: Option<&str>,
+    segments: &SegmentStore,
+) -> Result<(), Fault> {
     let input = read_bounded(&mut io::stdin().lock(), HOOK_INPUT_LIMIT).map_err(|error| Fault {
         code: error.code(),
         detail: error.to_string(),
@@ -93,14 +100,17 @@ fn capture(kind: HookEventKind, claude_version: Option<&str>, spool: &Spool) -> 
         detail: error.to_string(),
     })?;
 
-    // The event is aliased against the directory Claude reported, so paths compare across machines.
-    let line = serde_json::to_string(&hook).map_err(|error| Fault {
-        code: "hook_unserializable",
-        detail: error.to_string(),
-    })?;
+    // One immutable segment per event: concurrent hooks are separate processes, and a shared
+    // append-only file would let a killed process leave a fragment that reads like a record.
+    let observed_at = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |elapsed| {
+            i64::try_from(elapsed.as_millis()).unwrap_or(i64::MAX)
+        });
 
-    spool
-        .append(SpoolKind::Events, &line)
+    segments
+        .write(&hook, observed_at)
+        .map(|_| ())
         .map_err(|error| Fault {
             code: error.code(),
             detail: error.to_string(),

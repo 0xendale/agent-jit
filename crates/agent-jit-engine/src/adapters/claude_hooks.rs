@@ -16,7 +16,7 @@ use std::str::FromStr;
 
 use agent_jit_domain::canonical::{CanonicalError, Digest, digest_of};
 use agent_jit_domain::redaction::{Redacted, Redactor};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 /// Identifier of this adapter's normalization contract. Stamped on every event.
@@ -29,7 +29,7 @@ const MAX_EXTENSION_BYTES: usize = 1024;
 const MAX_EXTENSIONS: usize = 16;
 
 /// Which hook fired.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum HookEventKind {
     /// A session started.
@@ -107,7 +107,7 @@ impl FromStr for HookEventKind {
 ///
 /// Boxed inside [`HookPayload`]: tool payloads dwarf the other variants, and an enum sized for the
 /// largest one would make every event that much bigger.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ToolResult {
     /// Tool name.
     pub tool_name: String,
@@ -120,7 +120,7 @@ pub struct ToolResult {
 }
 
 /// The event-specific part of a normalized hook.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "payload", rename_all = "snake_case")]
 pub enum HookPayload {
     /// A session started.
@@ -155,10 +155,11 @@ pub enum HookPayload {
 }
 
 /// One hook payload, normalized, redacted, and bounded.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct NormalizedHook {
-    /// Adapter contract this event was produced by.
-    pub adapter_schema: &'static str,
+    /// Adapter contract this event was produced by. Always [`ADAPTER_SCHEMA`] for events this
+    /// build produced; carried as data so a stored event states which contract normalized it.
+    pub adapter_schema: String,
     /// Which hook fired.
     pub kind: HookEventKind,
     /// Claude's session identifier, used to correlate events before a session record exists.
@@ -305,7 +306,7 @@ pub fn normalize(
     let extensions = extension_metadata(&document, redactor);
 
     Ok(NormalizedHook {
-        adapter_schema: ADAPTER_SCHEMA,
+        adapter_schema: ADAPTER_SCHEMA.to_owned(),
         kind,
         session_key,
         cwd,

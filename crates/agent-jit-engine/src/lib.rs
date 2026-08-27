@@ -9,5 +9,6 @@ pub mod fingerprint;
 pub mod host;
 pub mod normalize;
 pub mod process;
+pub mod recorder;
 pub mod repository;
 pub mod spool;
