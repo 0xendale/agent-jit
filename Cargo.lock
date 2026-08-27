@@ -10,6 +10,7 @@ dependencies = [
  "agent-jit-engine",
  "agent-jit-store",
  "assert_cmd",
+ "blake3",
  "predicates",
  "serde_json",
  "tempfile",

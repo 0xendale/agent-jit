@@ -35,7 +35,7 @@ const RESERVED: &[&str] = &[
 
 /// Commands that already do something; the rest must report `not_implemented`.
 const IMPLEMENTED: &[&str] = &[
-    "paths", "doctor", "schema", "repo", "store", "hook", "trace",
+    "paths", "doctor", "schema", "repo", "store", "hook", "trace", "claude",
 ];
 
 fn bin(home: &Path) -> Command {

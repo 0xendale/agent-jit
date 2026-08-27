@@ -1,0 +1,8 @@
+{
+  "name": "agent-jit-recorder",
+  "version": "0.1.0",
+  "description": "Records Claude Code trajectories for agent-jit and serves the single jit.query tool.",
+  "author": {
+    "name": "agent-jit"
+  }
+}
