@@ -8,6 +8,7 @@ use std::process::ExitCode;
 
 mod app;
 mod claude;
+mod corpus;
 mod doctor;
 mod error;
 mod hook;
@@ -87,6 +88,7 @@ fn run(args: &[String]) -> Result<Rendered, CommandError> {
         "--help" | "-h" | "help" => Ok(Rendered::Text(usage())),
         "paths" => paths(&args[1..]),
         "claude" => claude::run(&args[1..]),
+        "corpus" => corpus::run(&args[1..]),
         "doctor" => doctor::run(&args[1..]),
         "schema" => schema::run(&args[1..]),
         "hook" => hook::run(&args[1..]),
