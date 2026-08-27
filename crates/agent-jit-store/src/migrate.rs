@@ -19,14 +19,21 @@ pub struct Migration {
 }
 
 /// Every migration, in order. Appending is the only legal change.
-pub const MIGRATIONS: &[Migration] = &[Migration {
-    version: 1,
-    name: "initial",
-    sql: include_str!("../migrations/0001_initial.sql"),
-}];
+pub const MIGRATIONS: &[Migration] = &[
+    Migration {
+        version: 1,
+        name: "initial",
+        sql: include_str!("../migrations/0001_initial.sql"),
+    },
+    Migration {
+        version: 2,
+        name: "trace_metrics",
+        sql: include_str!("../migrations/0002_trace_metrics.sql"),
+    },
+];
 
 /// Schema version this build implements.
-pub const CURRENT_SCHEMA_VERSION: u32 = 1;
+pub const CURRENT_SCHEMA_VERSION: u32 = 2;
 
 /// What one call to migrate did.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

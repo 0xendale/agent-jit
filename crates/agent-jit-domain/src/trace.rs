@@ -68,10 +68,15 @@ impl Record for Session {
 }
 
 /// What kind of observation an event carries.
+///
+/// Turn boundaries are their own kinds rather than being folded into [`Self::AgentMessage`].
+/// Active duration is a sum of prompt-to-stop intervals computed from *stored* events, so a Stop
+/// that is indistinguishable from an ordinary message once persisted would make Phase 0's primary
+/// denominator impossible to recompute from the database.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum EventKind {
-    /// The user stated an intent.
+    /// The user stated an intent. Opens a turn.
     UserPrompt,
     /// The agent invoked a tool.
     ToolCall,
@@ -79,6 +84,29 @@ pub enum EventKind {
     ToolResult,
     /// The agent produced a message.
     AgentMessage,
+    /// A session began.
+    SessionStart,
+    /// The agent stopped. Closes a turn.
+    Stop,
+    /// A session ended.
+    SessionEnd,
+}
+
+impl EventKind {
+    /// Whether this kind marks a session or turn boundary rather than work inside a turn.
+    #[must_use]
+    pub const fn is_turn_boundary(self) -> bool {
+        matches!(self, Self::SessionStart | Self::Stop | Self::SessionEnd)
+    }
+
+    /// Whether this kind is an agent-visible tool call.
+    ///
+    /// A tool *call* is what cost the agent a round trip; the matching result is the same call
+    /// observed from the other side, and counting both would double the number Phase 0 divides by.
+    #[must_use]
+    pub const fn is_agent_tool_call(self) -> bool {
+        matches!(self, Self::ToolCall)
+    }
 }
 
 /// One recorded event inside a session.

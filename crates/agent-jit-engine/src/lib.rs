@@ -7,6 +7,7 @@
 pub mod adapters;
 pub mod fingerprint;
 pub mod host;
+pub mod metrics;
 pub mod normalize;
 pub mod process;
 pub mod recorder;

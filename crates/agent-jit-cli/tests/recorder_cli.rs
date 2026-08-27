@@ -346,3 +346,91 @@ fn showing_an_unknown_trajectory_is_a_usage_error() {
         .code(2)
         .stdout(contains("trace_not_found"));
 }
+
+#[test]
+fn trace_metrics_reports_hand_checkable_values_with_their_sources() {
+    let home = tempfile::tempdir().unwrap();
+    let repository = tempfile::tempdir().unwrap();
+    init_repo(repository.path());
+
+    bin(home.path())
+        .args(["store", "migrate", "--json"])
+        .assert()
+        .success();
+    record_session(home.path(), repository.path());
+    bin(home.path())
+        .args(["store", "recover", "--json"])
+        .assert()
+        .success();
+
+    let listed = bin(home.path())
+        .args([
+            "trace",
+            "list",
+            "--repo",
+            repository.path().to_str().unwrap(),
+            "--json",
+        ])
+        .assert()
+        .success();
+    let trajectory_id = json(&listed.get_output().stdout)["trajectories"][0]["trajectory_id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+
+    let shown = bin(home.path())
+        .args(["trace", "metrics", &trajectory_id, "--json"])
+        .assert()
+        .success();
+    let metrics = json(&shown.get_output().stdout);
+
+    // The fixture session is one prompt, one tool call, one tool result, then Stop.
+    assert_eq!(metrics["turns"], 1);
+    assert_eq!(metrics["agent_tool_calls"], 1, "{metrics}");
+    assert_eq!(metrics["failed_tool_calls"], 0);
+
+    // Every number states where it came from.
+    assert_eq!(metrics["active_duration_ms"]["measurement_source"], "exact");
+    assert_eq!(metrics["active_duration_ms"]["source"], "stored_events");
+    assert_eq!(
+        metrics["estimated_input_tokens"]["measurement_source"],
+        "estimated"
+    );
+    assert_eq!(
+        metrics["estimated_input_tokens"]["method"],
+        "utf8_bytes_div_4"
+    );
+    // No versioned usage source exists, so the exact field is unknown rather than zero.
+    assert_eq!(
+        metrics["exact_input_tokens"]["measurement_source"],
+        "unknown"
+    );
+    assert_eq!(
+        metrics["exact_input_tokens"]["reason"],
+        "no_versioned_source"
+    );
+    assert!(metrics["exact_input_tokens"].get("value").is_none());
+
+    assert_eq!(metrics["provenance"]["computed_from"], "stored_events");
+    assert_eq!(metrics["provenance"]["event_count"], 6);
+}
+
+#[test]
+fn trace_metrics_for_an_unknown_trajectory_is_a_usage_error() {
+    let home = tempfile::tempdir().unwrap();
+    bin(home.path())
+        .args(["store", "migrate", "--json"])
+        .assert()
+        .success();
+
+    bin(home.path())
+        .args([
+            "trace",
+            "metrics",
+            "trj_01J0000000000000000000000A",
+            "--json",
+        ])
+        .assert()
+        .code(2)
+        .stdout(contains("trace_not_found"));
+}

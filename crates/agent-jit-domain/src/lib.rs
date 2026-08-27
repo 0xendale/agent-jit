@@ -13,6 +13,7 @@ pub mod envelope;
 pub mod fingerprint;
 pub mod ids;
 pub mod lifecycle;
+pub mod metrics;
 pub mod outcome;
 pub mod redaction;
 pub mod schema;

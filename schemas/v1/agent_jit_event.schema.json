@@ -120,10 +120,10 @@
       "pattern": "^ses_[0-9A-HJKMNP-TV-Z]{26}$"
     },
     "EventKind": {
-      "description": "What kind of observation an event carries.",
+      "description": "What kind of observation an event carries.\n\nTurn boundaries are their own kinds rather than being folded into [`Self::AgentMessage`].\nActive duration is a sum of prompt-to-stop intervals computed from *stored* events, so a Stop\nthat is indistinguishable from an ordinary message once persisted would make Phase 0's primary\ndenominator impossible to recompute from the database.",
       "oneOf": [
         {
-          "description": "The user stated an intent.",
+          "description": "The user stated an intent. Opens a turn.",
           "type": "string",
           "const": "user_prompt"
         },
@@ -141,6 +141,21 @@
           "description": "The agent produced a message.",
           "type": "string",
           "const": "agent_message"
+        },
+        {
+          "description": "A session began.",
+          "type": "string",
+          "const": "session_start"
+        },
+        {
+          "description": "The agent stopped. Closes a turn.",
+          "type": "string",
+          "const": "stop"
+        },
+        {
+          "description": "A session ended.",
+          "type": "string",
+          "const": "session_end"
         }
       ]
     },

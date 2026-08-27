@@ -313,3 +313,107 @@ fn opening_a_file_that_is_not_a_database_fails_closed() {
         "{error:?}"
     );
 }
+
+#[test]
+fn trace_metrics_round_trip_with_their_provenance_intact() {
+    use agent_jit_domain::metrics::{
+        Measured, MetricProvenance, RecorderHealth, TraceMetrics, Unknown,
+    };
+
+    let temp = tempfile::tempdir().unwrap();
+    let mut store = open(temp.path());
+
+    let repository = repository_record();
+    store.put_repository(&repository).unwrap();
+    let session = session_record(repository.id().to_owned(), 1);
+    store.put_session(&session).unwrap();
+
+    let mut body = Trajectory::sample();
+    body.session_id = session.id().to_owned();
+    body.repository_id = repository.id().to_owned();
+    let trajectory = Envelope::new(
+        TrajectoryId::from_body("01J0000000000000000000000A").unwrap(),
+        Provenance::recorded_by("agent-jit/0.1.0"),
+        body,
+    );
+    store.put_trajectory(&trajectory).unwrap();
+
+    let metrics = TraceMetrics {
+        active_duration_ms: Measured::exact(3_000_i64, "stored_events"),
+        wall_duration_ms: Measured::exact(3_603_100_i64, "stored_events"),
+        turns: 2,
+        agent_tool_calls: 2,
+        failed_tool_calls: 0,
+        observed_bytes: 2_400,
+        estimated_input_tokens: Measured::estimated(600_u64, "utf8_bytes_div_4"),
+        // No versioned usage source: this must survive as unknown, not as zero.
+        exact_input_tokens: Measured::unknown(Unknown::NoVersionedSource),
+        health: RecorderHealth {
+            truncated_payloads: 0,
+            quarantined_segments: 1,
+            duplicates_collapsed: 2,
+        },
+        provenance: MetricProvenance {
+            computed_from: "stored_events".to_owned(),
+            repository_id: repository.id().to_owned(),
+            session_id: session.id().to_owned(),
+            head_commit: "0".repeat(40),
+            event_count: 9,
+            adapter_schema: Some("agent_jit.claude_hooks.v1".to_owned()),
+            runtime_version: Some("2.1.223".to_owned()),
+            model_id: None,
+        },
+    };
+
+    store.put_trace_metrics(trajectory.id(), &metrics).unwrap();
+    let loaded = store.get_trace_metrics(trajectory.id()).unwrap().unwrap();
+
+    assert_eq!(loaded, metrics);
+    assert_eq!(loaded.exact_input_tokens.value(), None);
+    assert_eq!(
+        loaded.exact_input_tokens.source(),
+        "unknown:no_versioned_source"
+    );
+    assert_eq!(loaded.provenance.computed_from, "stored_events");
+    assert!(loaded.health.is_lossy());
+}
+
+#[test]
+fn metrics_for_an_unknown_trajectory_are_refused_by_sql() {
+    use agent_jit_domain::metrics::{
+        Measured, MetricProvenance, RecorderHealth, TraceMetrics, Unknown,
+    };
+
+    let temp = tempfile::tempdir().unwrap();
+    let mut store = open(temp.path());
+
+    let orphan = TrajectoryId::from_body("01J000000000000000000000ZZ").unwrap();
+    let metrics = TraceMetrics {
+        active_duration_ms: Measured::unknown(Unknown::NoStopObserved),
+        wall_duration_ms: Measured::unknown(Unknown::NoStopObserved),
+        turns: 0,
+        agent_tool_calls: 0,
+        failed_tool_calls: 0,
+        observed_bytes: 0,
+        estimated_input_tokens: Measured::unknown(Unknown::NoEventsObserved),
+        exact_input_tokens: Measured::unknown(Unknown::NoVersionedSource),
+        health: RecorderHealth {
+            truncated_payloads: 0,
+            quarantined_segments: 0,
+            duplicates_collapsed: 0,
+        },
+        provenance: MetricProvenance {
+            computed_from: "stored_events".to_owned(),
+            repository_id: repository_record().id().to_owned(),
+            session_id: SessionId::from_body("01J0000000000000000000000S").unwrap(),
+            head_commit: "0".repeat(40),
+            event_count: 0,
+            adapter_schema: None,
+            runtime_version: None,
+            model_id: None,
+        },
+    };
+
+    let error = store.put_trace_metrics(&orphan, &metrics).unwrap_err();
+    assert_eq!(error.code(), "store_constraint_violated");
+}

@@ -12,6 +12,7 @@ use agent_jit_store::{Store, StoreError};
 use serde_json::json;
 
 use crate::adapters::claude_hooks::{HookEventKind, HookPayload};
+use crate::metrics::{MetricInputs, compute_trace_metrics};
 use crate::recorder::{RecorderError, SessionAggregate};
 use crate::repository::RepositoryIdentity;
 
@@ -140,6 +141,28 @@ pub fn finalize(
     );
     store.put_trajectory(&trajectory)?;
     record_health(store, aggregate)?;
+
+    // Metrics are computed from the events that were just stored, not from the in-memory
+    // aggregate, so the persisted numbers are exactly what a later recomputation would produce.
+    let stored_events = store.list_events(&session_id)?;
+    let inputs = MetricInputs {
+        repository_id,
+        session_id,
+        head_commit: identity.head_commit.clone(),
+        adapter_schema: aggregate
+            .events
+            .first()
+            .map(|segment| segment.payload.adapter_schema.clone()),
+        runtime_version: aggregate.claude_version.clone(),
+        // No hook payload carries the model, so it stays absent rather than invented.
+        model_id: None,
+        exact_input_tokens: None,
+        quarantined_segments: u32::try_from(aggregate.quarantined.len()).unwrap_or(u32::MAX),
+        duplicates_collapsed: aggregate.duplicates,
+    };
+    if let Ok(metrics) = compute_trace_metrics(&stored_events, &inputs) {
+        store.put_trace_metrics(&trajectory_id, &metrics)?;
+    }
 
     Ok(FinalizeReport {
         trajectory_id,
@@ -285,13 +308,15 @@ fn ensure_repository(
 
 /// Maps a segment to the stored event's indexed columns.
 fn describe(segment: &crate::recorder::Segment) -> (EventKind, Option<String>, Digest) {
+    // Every hook kind keeps its own identity in the stored event. Collapsing the boundaries into
+    // AgentMessage would erase the turn structure that active duration is computed from.
     let kind = match segment.payload.kind {
         HookEventKind::UserPromptSubmit => EventKind::UserPrompt,
         HookEventKind::PreToolUse => EventKind::ToolCall,
         HookEventKind::PostToolUse | HookEventKind::PostToolUseFailure => EventKind::ToolResult,
-        HookEventKind::SessionStart | HookEventKind::Stop | HookEventKind::SessionEnd => {
-            EventKind::AgentMessage
-        }
+        HookEventKind::SessionStart => EventKind::SessionStart,
+        HookEventKind::Stop => EventKind::Stop,
+        HookEventKind::SessionEnd => EventKind::SessionEnd,
     };
 
     let tool_name = match &segment.payload.payload {

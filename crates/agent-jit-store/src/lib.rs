@@ -25,6 +25,7 @@ use agent_jit_domain::ids::{
     BenchmarkId, CandidateId, CapabilityId, GroupId, Id, IdKind, InvocationId, OutcomeId,
     RepositoryId, SessionId, TrajectoryId, WorkflowId,
 };
+use agent_jit_domain::metrics::TraceMetrics;
 use agent_jit_domain::outcome::Outcome;
 use agent_jit_domain::trace::{Event, Repository, Session, Trajectory};
 use rusqlite::{Connection, OpenFlags, params};
@@ -887,6 +888,120 @@ impl Store {
             "SELECT record_json FROM benchmark_records WHERE benchmark_id = ?1",
             id,
         )
+    }
+
+    /// Stores the computed metrics for one trajectory.
+    ///
+    /// Metrics are a cache derived from the events table, so this replaces any previous row rather
+    /// than refusing as a duplicate: recomputing must converge, not accumulate. Each value that can
+    /// be unknown is written as a nullable column plus a NOT NULL source, so SQL cannot confuse
+    /// "not measured" with "measured zero" either.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StoreError`] when the trajectory does not exist or the write fails.
+    pub fn put_trace_metrics(
+        &mut self,
+        trajectory_id: &TrajectoryId,
+        metrics: &TraceMetrics,
+    ) -> Result<(), StoreError> {
+        let json = canonical_string_of(metrics)?;
+        let digest = agent_jit_domain::canonical::digest_of(
+            &agent_jit_domain::canonical::to_value(metrics)?,
+        )?;
+
+        let result = self.connection.execute(
+            "INSERT INTO trace_metrics (\
+                trajectory_id, session_id, \
+                active_duration_ms, active_duration_source, wall_duration_ms, wall_duration_source, \
+                turns, agent_tool_calls, failed_tool_calls, observed_bytes, \
+                estimated_input_tokens, estimated_tokens_source, exact_input_tokens, exact_tokens_source, \
+                truncated_payloads, quarantined_segments, duplicates_collapsed, \
+                computed_from, event_count, adapter_schema, runtime_version, model_id, head_commit, \
+                record_json, digest, written_at) \
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, \
+                     ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26) \
+             ON CONFLICT(trajectory_id) DO UPDATE SET \
+                active_duration_ms = excluded.active_duration_ms, \
+                active_duration_source = excluded.active_duration_source, \
+                wall_duration_ms = excluded.wall_duration_ms, \
+                wall_duration_source = excluded.wall_duration_source, \
+                turns = excluded.turns, \
+                agent_tool_calls = excluded.agent_tool_calls, \
+                failed_tool_calls = excluded.failed_tool_calls, \
+                observed_bytes = excluded.observed_bytes, \
+                estimated_input_tokens = excluded.estimated_input_tokens, \
+                estimated_tokens_source = excluded.estimated_tokens_source, \
+                exact_input_tokens = excluded.exact_input_tokens, \
+                exact_tokens_source = excluded.exact_tokens_source, \
+                truncated_payloads = excluded.truncated_payloads, \
+                quarantined_segments = excluded.quarantined_segments, \
+                duplicates_collapsed = excluded.duplicates_collapsed, \
+                computed_from = excluded.computed_from, \
+                event_count = excluded.event_count, \
+                adapter_schema = excluded.adapter_schema, \
+                runtime_version = excluded.runtime_version, \
+                model_id = excluded.model_id, \
+                head_commit = excluded.head_commit, \
+                record_json = excluded.record_json, \
+                digest = excluded.digest, \
+                written_at = excluded.written_at",
+            params![
+                trajectory_id.to_string(),
+                metrics.provenance.session_id.to_string(),
+                metrics.active_duration_ms.value(),
+                metrics.active_duration_ms.source(),
+                metrics.wall_duration_ms.value(),
+                metrics.wall_duration_ms.source(),
+                metrics.turns,
+                metrics.agent_tool_calls,
+                metrics.failed_tool_calls,
+                metrics.observed_bytes,
+                metrics.estimated_input_tokens.value(),
+                metrics.estimated_input_tokens.source(),
+                metrics.exact_input_tokens.value(),
+                metrics.exact_input_tokens.source(),
+                metrics.health.truncated_payloads,
+                metrics.health.quarantined_segments,
+                metrics.health.duplicates_collapsed,
+                metrics.provenance.computed_from,
+                metrics.provenance.event_count,
+                metrics.provenance.adapter_schema,
+                metrics.provenance.runtime_version,
+                metrics.provenance.model_id,
+                metrics.provenance.head_commit,
+                json,
+                digest.to_string(),
+                self.clock.now_unix_ms(),
+            ],
+        );
+        classify_write(result, "trace_metrics", &trajectory_id.to_string())
+    }
+
+    /// Loads the stored metrics for one trajectory.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StoreError`] when the stored record cannot be read back as its contract.
+    pub fn get_trace_metrics(
+        &self,
+        trajectory_id: &TrajectoryId,
+    ) -> Result<Option<TraceMetrics>, StoreError> {
+        let json: Option<String> = self
+            .connection
+            .query_row(
+                "SELECT record_json FROM trace_metrics WHERE trajectory_id = ?1",
+                params![trajectory_id.to_string()],
+                |row| row.get(0),
+            )
+            .map_or_else(swallow_missing, |value: String| Ok(Some(value)))?;
+
+        json.map(|text| {
+            serde_json::from_str(&text).map_err(|error| StoreError::RecordInvalid {
+                reason: error.to_string(),
+            })
+        })
+        .transpose()
     }
 
     /// Records a recorder health event. Malformed input is counted here, never stored as a record.

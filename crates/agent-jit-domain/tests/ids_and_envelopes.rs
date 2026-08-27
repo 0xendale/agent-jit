@@ -146,3 +146,34 @@ fn derived_ids_are_deterministic_and_kind_specific() {
     assert_eq!(session.body(), repository.body());
     assert!(session.to_string().starts_with("ses_"));
 }
+
+#[test]
+fn event_kinds_distinguish_turn_boundaries_from_agent_messages() {
+    use agent_jit_domain::trace::EventKind;
+
+    // Active duration is a sum of prompt-to-stop intervals derived from STORED events. If a Stop
+    // is indistinguishable from an ordinary assistant message once persisted, that sum cannot be
+    // recomputed from the database, and Phase 0's primary denominator becomes unverifiable.
+    let boundaries = [
+        EventKind::SessionStart,
+        EventKind::Stop,
+        EventKind::SessionEnd,
+    ];
+    for kind in boundaries {
+        assert_ne!(
+            kind,
+            EventKind::AgentMessage,
+            "{kind:?} must be distinguishable from an agent message"
+        );
+        assert!(kind.is_turn_boundary(), "{kind:?} should be a boundary");
+    }
+
+    for kind in [
+        EventKind::UserPrompt,
+        EventKind::ToolCall,
+        EventKind::ToolResult,
+        EventKind::AgentMessage,
+    ] {
+        assert!(!kind.is_turn_boundary(), "{kind:?} is not a boundary");
+    }
+}

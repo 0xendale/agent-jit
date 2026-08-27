@@ -10,7 +10,7 @@ use crate::app::AppPaths;
 use crate::error::{CommandError, ExitClass};
 use crate::output::Rendered;
 
-const USAGE: &str = "usage: agent-jit trace <list --repo <path> | show <trajectory-id>> [--json]";
+const USAGE: &str = "usage: agent-jit trace <list --repo <path> | show <trajectory-id> | metrics <trajectory-id>> [--json]";
 
 /// Dispatches a `trace` subcommand.
 ///
@@ -21,6 +21,7 @@ pub fn run(args: &[String]) -> Result<Rendered, CommandError> {
     match args.first().map(String::as_str) {
         Some("list") => list(&args[1..]),
         Some("show") => show(&args[1..]),
+        Some("metrics") => metrics(&args[1..]),
         Some(other) => Err(CommandError::usage(format!(
             "unknown trace subcommand: {other}\n{USAGE}"
         ))),
@@ -205,4 +206,89 @@ fn show(args: &[String]) -> Result<Rendered, CommandError> {
         event_rows.len(),
         report["outcome"].as_str().unwrap_or("unannotated"),
     )))
+}
+
+/// Reports the stored cost metrics for one trajectory.
+///
+/// The numbers come from the `trace_metrics` table, which the recorder computed from stored events.
+/// Every one of them is rendered with its measurement source, so a reader can tell an exact value
+/// from an estimate and an estimate from a value that was never measured.
+fn metrics(args: &[String]) -> Result<Rendered, CommandError> {
+    let (trajectory_id, as_json) = parse_target(args)?;
+
+    let store = open_store()?;
+    let metrics = store
+        .get_trace_metrics(&trajectory_id)
+        .map_err(|error| refusal(&error))?
+        .ok_or_else(|| {
+            CommandError::new(
+                "trace_not_found",
+                format!("no stored metrics for `{trajectory_id}`"),
+                ExitClass::Usage,
+            )
+        })?;
+
+    if as_json {
+        let rendered = serde_json::to_value(&metrics).map_err(|error| {
+            CommandError::new("trace_unrenderable", error.to_string(), ExitClass::Internal)
+        })?;
+        return Ok(Rendered::Json(rendered));
+    }
+
+    Ok(Rendered::Text(format!(
+        "{trajectory_id}\n\
+         \x20 active_duration  {} ({})\n\
+         \x20 wall_duration    {} ({})\n\
+         \x20 turns            {}\n\
+         \x20 tool_calls       {} ({} failed)\n\
+         \x20 observed_bytes   {}\n\
+         \x20 input_tokens     {} ({})\n\
+         \x20 exact_tokens     {} ({})\n\
+         \x20 lossy            {}\n",
+        render_value(metrics.active_duration_ms.value()),
+        metrics.active_duration_ms.source(),
+        render_value(metrics.wall_duration_ms.value()),
+        metrics.wall_duration_ms.source(),
+        metrics.turns,
+        metrics.agent_tool_calls,
+        metrics.failed_tool_calls,
+        metrics.observed_bytes,
+        render_value(metrics.estimated_input_tokens.value()),
+        metrics.estimated_input_tokens.source(),
+        render_value(metrics.exact_input_tokens.value()),
+        metrics.exact_input_tokens.source(),
+        metrics.health.is_lossy(),
+    )))
+}
+
+/// Renders a measured value, showing absence as `unknown` rather than as a number.
+fn render_value<T: std::fmt::Display>(value: Option<T>) -> String {
+    value.map_or_else(|| "unknown".to_owned(), |value| value.to_string())
+}
+
+/// Parses `<trajectory-id> [--json]`, shared by `show` and `metrics`.
+fn parse_target(args: &[String]) -> Result<(TrajectoryId, bool), CommandError> {
+    let mut identifier: Option<String> = None;
+    let mut as_json = false;
+
+    for argument in args {
+        match argument.as_str() {
+            "--json" => as_json = true,
+            other if other.starts_with("--") => {
+                return Err(CommandError::usage(format!(
+                    "unknown option: {other}\n{USAGE}"
+                )));
+            }
+            other => identifier = Some(other.to_owned()),
+        }
+    }
+
+    let identifier = identifier.ok_or_else(|| CommandError::usage(USAGE))?;
+    let trajectory_id: TrajectoryId =
+        identifier
+            .parse()
+            .map_err(|error: agent_jit_domain::ids::IdError| {
+                CommandError::new(error.code(), error.to_string(), ExitClass::Usage)
+            })?;
+    Ok((trajectory_id, as_json))
 }

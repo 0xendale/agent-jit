@@ -4,6 +4,7 @@
 use std::os::unix::fs::PermissionsExt as _;
 use std::path::Path;
 
+use agent_jit_store::CURRENT_SCHEMA_VERSION;
 use assert_cmd::Command;
 use predicates::str::contains;
 use serde_json::Value;
@@ -28,7 +29,8 @@ fn migrate_creates_a_private_database_and_reports_the_schema_version() {
     let report = json(&assert.get_output().stdout);
 
     assert_eq!(report["from_version"], 0);
-    assert_eq!(report["to_version"], 1);
+    // Version-agnostic: a new migration must not require editing this assertion.
+    assert_eq!(report["to_version"], CURRENT_SCHEMA_VERSION);
     assert!(report["applied"].as_u64().unwrap() >= 1);
 
     let database = home.path().join("data/state.sqlite3");
@@ -59,7 +61,7 @@ fn migrate_is_idempotent_and_check_reports_health() {
     assert_eq!(health["healthy"], true);
     assert_eq!(health["integrity"], "ok");
     assert_eq!(health["foreign_key_violations"], 0);
-    assert_eq!(health["schema_version"], 1);
+    assert_eq!(health["schema_version"], CURRENT_SCHEMA_VERSION);
 }
 
 #[test]
