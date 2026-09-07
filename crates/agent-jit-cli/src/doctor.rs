@@ -14,15 +14,24 @@ use crate::output::Rendered;
 /// Returns a [`CommandError`] for unknown options or unusable private paths.
 pub fn run(args: &[String]) -> Result<Rendered, CommandError> {
     let mut as_json = false;
-    for argument in args {
+    let mut recorder = false;
+    let mut remaining = args.iter();
+    while let Some(argument) = remaining.next() {
         match argument.as_str() {
             "--json" => as_json = true,
+            "--scope" if remaining.next().map(String::as_str) == Some("recorder") => {
+                recorder = true;
+            }
             other => {
                 return Err(CommandError::usage(format!(
                     "unknown option: {other}\nusage: agent-jit doctor [--json]"
                 )));
             }
         }
+    }
+
+    if recorder {
+        return crate::doctor_recorder::run(as_json);
     }
 
     // An unsupported host is reported, not thrown: `doctor` exists to explain the situation.

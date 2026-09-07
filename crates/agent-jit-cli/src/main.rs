@@ -8,12 +8,14 @@ use std::process::ExitCode;
 
 mod app;
 mod claude;
+mod claude_args;
 mod corpus;
 mod corpus_export;
 mod corpus_export_io;
 mod corpus_export_redaction;
 mod corpus_ops;
 mod doctor;
+mod doctor_recorder;
 mod error;
 mod hook;
 mod output;

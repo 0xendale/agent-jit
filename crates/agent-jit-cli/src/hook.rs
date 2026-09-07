@@ -34,7 +34,18 @@ const USAGE: &str = "usage: agent-jit hook ingest --event <session-start|user-pr
 /// than Claude's. Ingestion failures are reported through the health spool and exit zero.
 pub fn run(args: &[String]) -> Result<Rendered, CommandError> {
     match args.first().map(String::as_str) {
-        Some("ingest") => ingest(&args[1..]),
+        Some("ingest") => match ingest(&args[1..]) {
+            Ok(rendered) => Ok(rendered),
+            Err(error) if error.code == "usage" => Err(error),
+            Err(error) => {
+                let _ = writeln!(
+                    io::stderr().lock(),
+                    "agent-jit: recorder unavailable: {}",
+                    error.code
+                );
+                Ok(Rendered::Text(String::new()))
+            }
+        },
         Some(other) => Err(CommandError::usage(format!(
             "unknown hook subcommand: {other}\n{USAGE}"
         ))),
@@ -126,7 +137,7 @@ fn redactor() -> Redactor {
 /// Parses `--event` and `--claude-version`.
 fn parse_arguments(args: &[String]) -> Result<(HookEventKind, Option<String>), CommandError> {
     let mut kind: Option<HookEventKind> = None;
-    let mut claude_version: Option<String> = None;
+    let mut claude_version = std::env::var("AGENT_JIT_CLAUDE_VERSION").ok();
 
     let mut remaining = args.iter();
     while let Some(argument) = remaining.next() {

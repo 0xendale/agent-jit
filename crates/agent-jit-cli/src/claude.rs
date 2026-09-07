@@ -10,6 +10,8 @@
 //! build that produced it.
 
 use std::collections::BTreeMap;
+use std::io::Write as _;
+use std::os::unix::fs::{DirBuilderExt as _, OpenOptionsExt as _};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -19,10 +21,11 @@ use agent_jit_engine::repository::discover;
 use serde_json::json;
 
 use crate::app::AppPaths;
+use crate::claude_args::{parse_flags, parse_run_arguments};
 use crate::error::{CommandError, ExitClass};
 use crate::output::Rendered;
 
-const USAGE: &str = "usage: agent-jit claude <materialize [--json] | \
+pub(super) const USAGE: &str = "usage: agent-jit claude <materialize [--json] | \
                      run --repo <path> [--claude-bin <path>] [--json] -- <claude-args...> | \
                      uninstall [--json]>";
 
@@ -114,13 +117,19 @@ fn materialize(paths: &AppPaths) -> Result<Materialized, CommandError> {
         if let Some(parent) = path.parent() {
             create_dir(parent)?;
         }
-        std::fs::write(&path, contents).map_err(|error| {
-            CommandError::new(
-                "claude_plugin_unwritable",
-                format!("`{}`: {error}", path.display()),
-                ExitClass::Internal,
-            )
-        })?;
+        std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .mode(0o600)
+            .open(&path)
+            .and_then(|mut file| file.write_all(contents.as_bytes()))
+            .map_err(|error| {
+                CommandError::new(
+                    "claude_plugin_unwritable",
+                    format!("`{}`: {error}", path.display()),
+                    ExitClass::Internal,
+                )
+            })?;
     }
 
     create_dir(&root)?;
@@ -183,13 +192,17 @@ fn current_binary() -> Result<PathBuf, CommandError> {
 
 /// Creates a directory, reporting a typed error.
 fn create_dir(path: &Path) -> Result<(), CommandError> {
-    std::fs::create_dir_all(path).map_err(|error| {
-        CommandError::new(
-            "claude_plugin_unwritable",
-            format!("`{}`: {error}", path.display()),
-            ExitClass::Internal,
-        )
-    })
+    std::fs::DirBuilder::new()
+        .recursive(true)
+        .mode(0o700)
+        .create(path)
+        .map_err(|error| {
+            CommandError::new(
+                "claude_plugin_unwritable",
+                format!("`{}`: {error}", path.display()),
+                ExitClass::Internal,
+            )
+        })
 }
 
 /// `agent-jit claude materialize`.
@@ -230,6 +243,11 @@ fn run_command(args: &[String]) -> Result<Rendered, CommandError> {
 
     let executable = claude_bin.unwrap_or_else(|| "claude".to_owned());
     let mut command = Command::new(&executable);
+    if let Ok(version) = crate::doctor_recorder::runtime_version(&executable) {
+        command.env("AGENT_JIT_CLAUDE_VERSION", version);
+    } else {
+        command.env_remove("AGENT_JIT_CLAUDE_VERSION");
+    }
     command
         .current_dir(&identity.worktree_root)
         // Every argument the operator passed, in order, then exactly one addition.
@@ -308,65 +326,4 @@ fn uninstall_command(args: &[String]) -> Result<Rendered, CommandError> {
     } else {
         "nothing to remove\n".to_owned()
     }))
-}
-
-/// Parses the flags shared by `materialize` and `uninstall`.
-fn parse_flags(args: &[String]) -> Result<bool, CommandError> {
-    let mut as_json = false;
-    for argument in args {
-        match argument.as_str() {
-            "--json" => as_json = true,
-            other => {
-                return Err(CommandError::usage(format!(
-                    "unknown option: {other}\n{USAGE}"
-                )));
-            }
-        }
-    }
-    Ok(as_json)
-}
-
-/// Parses `run`'s arguments, splitting agent-jit's own options from Claude's at `--`.
-fn parse_run_arguments(
-    args: &[String],
-) -> Result<(String, Option<String>, bool, Vec<String>), CommandError> {
-    let (own, claude_args) = match args.iter().position(|argument| argument == "--") {
-        Some(index) => (&args[..index], args[index + 1..].to_vec()),
-        None => (args, Vec::new()),
-    };
-
-    let mut repo: Option<String> = None;
-    let mut claude_bin: Option<String> = None;
-    let mut as_json = false;
-
-    let mut remaining = own.iter();
-    while let Some(argument) = remaining.next() {
-        match argument.as_str() {
-            "--repo" => {
-                repo = Some(
-                    remaining
-                        .next()
-                        .ok_or_else(|| CommandError::usage(USAGE))?
-                        .clone(),
-                );
-            }
-            "--claude-bin" => {
-                claude_bin = Some(
-                    remaining
-                        .next()
-                        .ok_or_else(|| CommandError::usage(USAGE))?
-                        .clone(),
-                );
-            }
-            "--json" => as_json = true,
-            other => {
-                return Err(CommandError::usage(format!(
-                    "unknown option: {other}\n{USAGE}"
-                )));
-            }
-        }
-    }
-
-    let repo = repo.ok_or_else(|| CommandError::usage(USAGE))?;
-    Ok((repo, claude_bin, as_json, claude_args))
 }
