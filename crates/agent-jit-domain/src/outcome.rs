@@ -6,6 +6,11 @@ use serde::{Deserialize, Serialize};
 use crate::envelope::Record;
 use crate::ids::{TrajectoryId, kind};
 
+pub use crate::outcome_annotation::{
+    AnnotationRevision, AnnotationStatus, EvidenceRef, MAX_ANNOTATION_ACTOR_BYTES,
+    MAX_ANNOTATION_RATIONALE_BYTES, MAX_EVIDENCE_REFS, OutcomeAnnotation, OutcomeAnnotationError,
+};
+
 /// How a recorded run ended.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]

@@ -9,8 +9,15 @@
 //! Everything here assumes the path has already passed the private-path checks: the database lives
 //! outside every observed repository, is a real file rather than a symlink, and is `0600`.
 
+mod audit;
 mod error;
+mod evidence;
+mod export;
 mod migrate;
+mod outcomes;
+mod references;
+mod retention;
+mod retention_size;
 
 use std::fs::Permissions;
 use std::os::unix::fs::PermissionsExt as _;
@@ -30,8 +37,11 @@ use agent_jit_domain::outcome::Outcome;
 use agent_jit_domain::trace::{Event, Repository, Session, Trajectory};
 use rusqlite::{Connection, OpenFlags, params};
 
+pub use audit::{ActiveHold, AuditAction, CorpusAudit};
 pub use error::StoreError;
+pub use export::{ExportRecord, ExportSnapshot};
 pub use migrate::{CURRENT_SCHEMA_VERSION, MigrationReport};
+pub use retention::{PruneMode, PruneReport, RetentionPolicy, RetentionUsage};
 
 /// Mode every state file must have.
 const PRIVATE_FILE_MODE: u32 = 0o600;

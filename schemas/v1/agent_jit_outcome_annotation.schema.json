@@ -1,0 +1,189 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Envelope_OutcomeAnnotation",
+  "type": "object",
+  "properties": {
+    "schema": {
+      "type": "string",
+      "const": "agent_jit.outcome_annotation"
+    },
+    "version": {
+      "type": "integer",
+      "const": 1
+    },
+    "id": {
+      "$ref": "#/$defs/OutcomeAnnotationId"
+    },
+    "provenance": {
+      "$ref": "#/$defs/Provenance"
+    },
+    "body": {
+      "$ref": "#/$defs/OutcomeAnnotation"
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "version",
+    "id",
+    "provenance",
+    "body"
+  ],
+  "$defs": {
+    "OutcomeAnnotation": {
+      "type": "object",
+      "properties": {
+        "trajectory_id": {
+          "$ref": "#/$defs/TrajectoryId"
+        },
+        "revision": {
+          "$ref": "#/$defs/AnnotationRevision"
+        },
+        "status": {
+          "$ref": "#/$defs/AnnotationStatus"
+        },
+        "actor": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256,
+          "x-agent-jit-max-utf8-bytes": 256
+        },
+        "annotated_at_unix_ms": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "rationale": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096,
+          "x-agent-jit-max-utf8-bytes": 4096
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/EvidenceRef"
+          },
+          "maxItems": 16
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "trajectory_id",
+        "revision",
+        "status",
+        "actor",
+        "annotated_at_unix_ms",
+        "rationale",
+        "evidence"
+      ]
+    },
+    "TrajectoryId": {
+      "description": "Identifier for a Trajectory record.",
+      "type": "string",
+      "pattern": "^trj_[0-9A-HJKMNP-TV-Z]{26}$"
+    },
+    "AnnotationRevision": {
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 1,
+      "maximum": 4294967295
+    },
+    "AnnotationStatus": {
+      "description": "Manual outcome vocabulary, separate from legacy [`crate::outcome::OutcomeStatus`].",
+      "oneOf": [
+        {
+          "description": "Human review confirmed success.",
+          "type": "string",
+          "const": "succeeded"
+        },
+        {
+          "description": "Human review confirmed failure.",
+          "type": "string",
+          "const": "failed"
+        },
+        {
+          "description": "Work stopped before reaching a conclusion.",
+          "type": "string",
+          "const": "abandoned"
+        },
+        {
+          "description": "Available evidence cannot determine an outcome.",
+          "type": "string",
+          "const": "unknown"
+        }
+      ]
+    },
+    "EvidenceRef": {
+      "type": "string",
+      "pattern": "^(?:[^./\\\\\\x00][^/\\\\\\x00]*|\\.[^./\\\\\\x00][^/\\\\\\x00]*|\\.\\.[^/\\\\\\x00][^/\\\\\\x00]*)(?:/(?:[^./\\\\\\x00][^/\\\\\\x00]*|\\.[^./\\\\\\x00][^/\\\\\\x00]*|\\.\\.[^/\\\\\\x00][^/\\\\\\x00]*))*$"
+    },
+    "OutcomeAnnotationId": {
+      "description": "Identifier for a OutcomeAnnotation record.",
+      "type": "string",
+      "pattern": "^oan_[0-9A-HJKMNP-TV-Z]{26}$"
+    },
+    "Provenance": {
+      "description": "Provenance recorded alongside every envelope.",
+      "type": "object",
+      "properties": {
+        "produced_by": {
+          "description": "Name and version of the component that produced the record, e.g. `agent-jit/0.1.0`.",
+          "type": "string"
+        },
+        "source": {
+          "description": "How the record entered the system.",
+          "$ref": "#/$defs/ProvenanceSource"
+        },
+        "recorded_at_unix_ms": {
+          "description": "Wall-clock time the record was produced. Volatile: never part of a digest.",
+          "type": "integer",
+          "format": "int64"
+        },
+        "parents": {
+          "description": "Digests of the records this one was derived from, in a stable order.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Digest"
+          },
+          "default": []
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "produced_by",
+        "source",
+        "recorded_at_unix_ms"
+      ]
+    },
+    "ProvenanceSource": {
+      "description": "How a record entered the system.",
+      "oneOf": [
+        {
+          "description": "Captured live from agent hooks.",
+          "type": "string",
+          "const": "recorded"
+        },
+        {
+          "description": "Imported from an exact-shape historical record.",
+          "type": "string",
+          "const": "imported"
+        },
+        {
+          "description": "Derived from other records already in the store.",
+          "type": "string",
+          "const": "derived"
+        },
+        {
+          "description": "Confirmed by a human operator.",
+          "type": "string",
+          "const": "confirmed"
+        }
+      ]
+    },
+    "Digest": {
+      "description": "BLAKE3 digest of a canonical JSON byte string, lowercase hex.",
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    }
+  }
+}

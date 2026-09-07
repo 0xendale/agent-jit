@@ -6,6 +6,7 @@
 
 use std::path::PathBuf;
 
+use agent_jit_domain::outcome::{MAX_ANNOTATION_ACTOR_BYTES, MAX_ANNOTATION_RATIONALE_BYTES};
 use agent_jit_domain::schema::{SCHEMA_DIR, ValidationError, generated_schemas, validate_document};
 
 fn schema_root() -> PathBuf {
@@ -30,6 +31,7 @@ fn every_record_kind_has_a_generated_schema() {
             "agent_jit.group",
             "agent_jit.invocation",
             "agent_jit.outcome",
+            "agent_jit.outcome_annotation",
             "agent_jit.replay_result",
             "agent_jit.repository",
             "agent_jit.session",
@@ -164,4 +166,103 @@ fn a_float_metric_is_refused() {
     document["body"]["duration_ms"] = serde_json::json!(42.5);
     let error = validate_document(&document).unwrap_err();
     assert_eq!(error.code(), "schema_invalid_record");
+}
+
+fn annotation_document() -> serde_json::Value {
+    serde_json::json!({
+        "schema": "agent_jit.outcome_annotation",
+        "version": 1,
+        "id": "oan_01J0000000000000000000000A",
+        "provenance": {
+            "produced_by": "agent-jit/0.1.0",
+            "source": "confirmed",
+            "recorded_at_unix_ms": 1,
+            "parents": []
+        },
+        "body": {
+            "trajectory_id": "trj_01J0000000000000000000000A",
+            "revision": 1,
+            "status": "succeeded",
+            "actor": "operator",
+            "annotated_at_unix_ms": 1,
+            "rationale": "reviewed",
+            "evidence": ["evidence/result.json"]
+        }
+    })
+}
+
+#[test]
+fn annotation_schema_declares_utf8_byte_limits_used_by_validation() {
+    let schema = generated_schemas()
+        .into_iter()
+        .find(|schema| schema.schema_name == "agent_jit.outcome_annotation")
+        .unwrap();
+    let parsed: serde_json::Value = serde_json::from_str(&schema.contents).unwrap();
+
+    assert_eq!(
+        parsed.pointer("/$defs/OutcomeAnnotation/properties/actor/x-agent-jit-max-utf8-bytes"),
+        Some(&serde_json::json!(MAX_ANNOTATION_ACTOR_BYTES))
+    );
+    assert_eq!(
+        parsed.pointer("/$defs/OutcomeAnnotation/properties/rationale/x-agent-jit-max-utf8-bytes"),
+        Some(&serde_json::json!(MAX_ANNOTATION_RATIONALE_BYTES))
+    );
+
+    assert_eq!(
+        parsed.pointer("/$defs/OutcomeAnnotation/properties/actor/maxLength"),
+        Some(&serde_json::json!(MAX_ANNOTATION_ACTOR_BYTES))
+    );
+    assert_eq!(
+        parsed.pointer("/$defs/OutcomeAnnotation/properties/rationale/maxLength"),
+        Some(&serde_json::json!(MAX_ANNOTATION_RATIONALE_BYTES))
+    );
+}
+
+#[test]
+fn annotation_validation_enforces_declared_utf8_byte_limits() {
+    let mut actor = annotation_document();
+    actor["body"]["actor"] = serde_json::json!("é".repeat(MAX_ANNOTATION_ACTOR_BYTES / 2 + 1));
+    let error = validate_document(&actor).unwrap_err();
+    assert!(
+        matches!(&error, ValidationError::InvalidRecord { reason, .. } if reason.contains("UTF-8 bytes"))
+    );
+    assert_eq!(error.code(), "schema_invalid_record");
+
+    let mut rationale = annotation_document();
+    rationale["body"]["rationale"] =
+        serde_json::json!("é".repeat(MAX_ANNOTATION_RATIONALE_BYTES / 2 + 1));
+    let error = validate_document(&rationale).unwrap_err();
+    assert!(
+        matches!(&error, ValidationError::InvalidRecord { reason, .. } if reason.contains("UTF-8 bytes"))
+    );
+    assert_eq!(error.code(), "schema_invalid_record");
+}
+
+#[test]
+fn evidence_schema_pattern_and_validation_reject_the_same_unsafe_paths() {
+    let schema = generated_schemas()
+        .into_iter()
+        .find(|schema| schema.schema_name == "agent_jit.outcome_annotation")
+        .unwrap();
+    let parsed: serde_json::Value = serde_json::from_str(&schema.contents).unwrap();
+    let pattern = parsed
+        .pointer("/$defs/EvidenceRef/pattern")
+        .and_then(serde_json::Value::as_str)
+        .unwrap();
+    let regex = regex::Regex::new(pattern).unwrap();
+
+    assert!(regex.is_match("evidence/result.json"));
+    assert!(regex.is_match(".hidden/..."));
+    for path in [
+        "", "/tmp/x", ".", "..", "./x", "a/./x", "../x", "a/../x", "a//x", "a/", "a\\x", "a/\0x",
+    ] {
+        assert!(!regex.is_match(path), "schema pattern accepted {path:?}");
+        let mut document = annotation_document();
+        document["body"]["evidence"] = serde_json::json!([path]);
+        assert_eq!(
+            validate_document(&document).unwrap_err().code(),
+            "schema_invalid_record",
+            "typed validation accepted {path:?}"
+        );
+    }
 }

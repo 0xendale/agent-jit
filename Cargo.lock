@@ -12,6 +12,7 @@ dependencies = [
  "assert_cmd",
  "blake3",
  "predicates",
+ "rusqlite",
  "serde_json",
  "tempfile",
 ]

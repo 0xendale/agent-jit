@@ -59,6 +59,10 @@ pub mod kind {
         Trajectory => "trj",
         /// The recorded result of a trajectory.
         Outcome => "out",
+        /// One immutable manual annotation of a trajectory outcome.
+        OutcomeAnnotation => "oan",
+        /// One frozen corpus used as durable evaluation evidence.
+        FrozenCorpus => "cor",
         /// A human-confirmed group of trajectories solving one intent.
         Group => "grp",
         /// A candidate capability contract inferred from a group.
@@ -289,6 +293,10 @@ alias! {
     TrajectoryId => Trajectory,
     /// Identifies a recorded outcome.
     OutcomeId => Outcome,
+    /// Identifies an immutable manual outcome annotation.
+    OutcomeAnnotationId => OutcomeAnnotation,
+    /// Identifies a frozen evaluation corpus.
+    FrozenCorpusId => FrozenCorpus,
     /// Identifies a confirmed group.
     GroupId => Group,
     /// Identifies a candidate contract.

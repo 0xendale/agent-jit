@@ -10,6 +10,8 @@ use crate::canonical::Digest;
 use crate::envelope::{Envelope, Record};
 use crate::{benchmark, candidate, capability, outcome, trace};
 
+const MAX_UTF8_BYTES_KEY: &str = "x-agent-jit-max-utf8-bytes";
+
 /// Directory, relative to the workspace root, holding the checked-in schemas.
 pub const SCHEMA_DIR: &str = "schemas/v1";
 
@@ -91,6 +93,7 @@ macro_rules! for_each_record {
             candidate::Group,
             capability::Invocation,
             outcome::Outcome,
+            outcome::OutcomeAnnotation,
             capability::ReplayResult,
             trace::Repository,
             trace::Session,
@@ -176,6 +179,16 @@ fn validate_as<T: Record>(
         });
     }
 
+    let generated = serde_json::to_value(schemars::schema_for!(Envelope<T>))
+        .unwrap_or_else(|_| unreachable!("a generated schema is always serializable"));
+    validate_schema_extensions(&generated, document).map_err(|reason| {
+        ValidationError::InvalidRecord {
+            schema: T::SCHEMA,
+            version,
+            reason,
+        }
+    })?;
+
     let envelope: Envelope<T> = serde_json::from_value(document.clone()).map_err(|error| {
         ValidationError::InvalidRecord {
             schema: T::SCHEMA,
@@ -198,4 +211,85 @@ fn validate_as<T: Record>(
         id: envelope.id().to_string(),
         digest,
     })
+}
+
+fn validate_schema_extensions(schema: &Value, document: &Value) -> Result<(), String> {
+    validate_extensions_at(schema, document, schema, "")
+}
+
+fn validate_extensions_at(
+    schema: &Value,
+    document: &Value,
+    root: &Value,
+    path: &str,
+) -> Result<(), String> {
+    if let Some(reference) = schema.get("$ref").and_then(Value::as_str) {
+        let pointer = reference
+            .strip_prefix('#')
+            .ok_or_else(|| format!("unsupported non-local schema reference `{reference}`"))?;
+        let target = root
+            .pointer(pointer)
+            .ok_or_else(|| format!("unresolved schema reference `{reference}`"))?;
+        validate_extensions_at(target, document, root, path)?;
+    }
+
+    if let Some(limit) = schema.get(MAX_UTF8_BYTES_KEY) {
+        let limit = limit
+            .as_u64()
+            .and_then(|value| usize::try_from(value).ok())
+            .ok_or_else(|| format!("invalid `{MAX_UTF8_BYTES_KEY}` schema value"))?;
+        if let Some(value) = document.as_str()
+            && value.len() > limit
+        {
+            return Err(format!("string at `{path}` exceeds {limit} UTF-8 bytes"));
+        }
+    }
+
+    if let (Some(properties), Some(object)) = (schema.get("properties"), document.as_object()) {
+        let properties = properties
+            .as_object()
+            .ok_or_else(|| "schema `properties` must be an object".to_owned())?;
+        for (name, property_schema) in properties {
+            if let Some(value) = object.get(name) {
+                validate_extensions_at(property_schema, value, root, &format!("{path}/{name}"))?;
+            }
+        }
+    }
+
+    if let (Some(items), Some(array)) = (schema.get("items"), document.as_array()) {
+        for (index, value) in array.iter().enumerate() {
+            validate_extensions_at(items, value, root, &format!("{path}/{index}"))?;
+        }
+    }
+
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use super::validate_schema_extensions;
+
+    #[test]
+    fn utf8_byte_extension_is_enforced_independently_of_typed_deserialization() {
+        let schema = json!({
+            "$defs": {
+                "bounded": {
+                    "type": "string",
+                    "x-agent-jit-max-utf8-bytes": 4
+                }
+            },
+            "type": "object",
+            "properties": {
+                "values": {
+                    "type": "array",
+                    "items": {"$ref": "#/$defs/bounded"}
+                }
+            }
+        });
+
+        assert!(validate_schema_extensions(&schema, &json!({"values": ["éé"]})).is_ok());
+        assert!(validate_schema_extensions(&schema, &json!({"values": ["ééé"]})).is_err());
+    }
 }

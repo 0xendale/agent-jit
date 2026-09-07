@@ -71,10 +71,10 @@ fn schema_generate_writes_every_contract_to_the_requested_directory() {
         .args(["schema", "generate", "--out", out.path().to_str().unwrap()])
         .assert()
         .success()
-        .stdout(contains("12 schemas"));
+        .stdout(contains("13 schemas"));
 
     let written = std::fs::read_dir(out.path()).unwrap().count();
-    assert_eq!(written, 12);
+    assert_eq!(written, 13);
 }
 
 #[test]
