@@ -1,0 +1,6 @@
+{
+  "session_id": 12345,
+  "cwd": "/Users/someone/code/pipeline-viz",
+  "hook_event_name": "UserPromptSubmit",
+  "prompt": "hello"
+}

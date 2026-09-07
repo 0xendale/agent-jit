@@ -1,0 +1,182 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Envelope_Trajectory",
+  "type": "object",
+  "properties": {
+    "schema": {
+      "type": "string",
+      "const": "agent_jit.trajectory"
+    },
+    "version": {
+      "type": "integer",
+      "const": 1
+    },
+    "id": {
+      "$ref": "#/$defs/TrajectoryId"
+    },
+    "provenance": {
+      "$ref": "#/$defs/Provenance"
+    },
+    "body": {
+      "$ref": "#/$defs/Trajectory"
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "version",
+    "id",
+    "provenance",
+    "body"
+  ],
+  "$defs": {
+    "Trajectory": {
+      "description": "A normalized run: one stated intent, the events that served it, and its outcome.",
+      "type": "object",
+      "properties": {
+        "session_id": {
+          "description": "Session the trajectory was extracted from.",
+          "$ref": "#/$defs/SessionId"
+        },
+        "repository_id": {
+          "description": "Repository the trajectory ran against.",
+          "$ref": "#/$defs/RepositoryId"
+        },
+        "head_commit": {
+          "description": "Commit checked out while the trajectory ran.",
+          "type": "string"
+        },
+        "intent": {
+          "description": "The intent this run solved, as stated by the user or annotated by the operator.",
+          "type": "string"
+        },
+        "events": {
+          "description": "Events belonging to this trajectory, in observed order.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/EventId"
+          }
+        },
+        "outcome_id": {
+          "description": "Recorded outcome, absent until the run is annotated.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/OutcomeId"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "started_at_unix_ms": {
+          "description": "Wall-clock start. Volatile: excluded from the digest.",
+          "type": "integer",
+          "format": "int64"
+        },
+        "duration_ms": {
+          "description": "Observed duration. Volatile: excluded from the digest.",
+          "type": "integer",
+          "format": "int64"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "session_id",
+        "repository_id",
+        "head_commit",
+        "intent",
+        "events",
+        "started_at_unix_ms",
+        "duration_ms"
+      ]
+    },
+    "SessionId": {
+      "description": "Identifier for a Session record.",
+      "type": "string",
+      "pattern": "^ses_[0-9A-HJKMNP-TV-Z]{26}$"
+    },
+    "RepositoryId": {
+      "description": "Identifier for a Repository record.",
+      "type": "string",
+      "pattern": "^rep_[0-9A-HJKMNP-TV-Z]{26}$"
+    },
+    "EventId": {
+      "description": "Identifier for a Event record.",
+      "type": "string",
+      "pattern": "^evt_[0-9A-HJKMNP-TV-Z]{26}$"
+    },
+    "OutcomeId": {
+      "description": "Identifier for a Outcome record.",
+      "type": "string",
+      "pattern": "^out_[0-9A-HJKMNP-TV-Z]{26}$"
+    },
+    "TrajectoryId": {
+      "description": "Identifier for a Trajectory record.",
+      "type": "string",
+      "pattern": "^trj_[0-9A-HJKMNP-TV-Z]{26}$"
+    },
+    "Provenance": {
+      "description": "Provenance recorded alongside every envelope.",
+      "type": "object",
+      "properties": {
+        "produced_by": {
+          "description": "Name and version of the component that produced the record, e.g. `agent-jit/0.1.0`.",
+          "type": "string"
+        },
+        "source": {
+          "description": "How the record entered the system.",
+          "$ref": "#/$defs/ProvenanceSource"
+        },
+        "recorded_at_unix_ms": {
+          "description": "Wall-clock time the record was produced. Volatile: never part of a digest.",
+          "type": "integer",
+          "format": "int64"
+        },
+        "parents": {
+          "description": "Digests of the records this one was derived from, in a stable order.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Digest"
+          },
+          "default": []
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "produced_by",
+        "source",
+        "recorded_at_unix_ms"
+      ]
+    },
+    "ProvenanceSource": {
+      "description": "How a record entered the system.",
+      "oneOf": [
+        {
+          "description": "Captured live from agent hooks.",
+          "type": "string",
+          "const": "recorded"
+        },
+        {
+          "description": "Imported from an exact-shape historical record.",
+          "type": "string",
+          "const": "imported"
+        },
+        {
+          "description": "Derived from other records already in the store.",
+          "type": "string",
+          "const": "derived"
+        },
+        {
+          "description": "Confirmed by a human operator.",
+          "type": "string",
+          "const": "confirmed"
+        }
+      ]
+    },
+    "Digest": {
+      "description": "BLAKE3 digest of a canonical JSON byte string, lowercase hex.",
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    }
+  }
+}

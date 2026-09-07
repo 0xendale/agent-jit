@@ -1,0 +1,31 @@
+[package]
+name = "agent-jit-cli"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+description = "The agent-jit command line binary."
+build = "build.rs"
+
+[[bin]]
+name = "agent-jit"
+path = "src/main.rs"
+
+[dependencies]
+agent-jit-domain.workspace = true
+agent-jit-engine.workspace = true
+agent-jit-store.workspace = true
+serde_json.workspace = true
+tempfile.workspace = true
+
+[dev-dependencies]
+assert_cmd.workspace = true
+blake3.workspace = true
+predicates.workspace = true
+rusqlite.workspace = true
+tempfile.workspace = true
+
+[lints]
+workspace = true

@@ -1,0 +1,206 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Envelope_Outcome",
+  "type": "object",
+  "properties": {
+    "schema": {
+      "type": "string",
+      "const": "agent_jit.outcome"
+    },
+    "version": {
+      "type": "integer",
+      "const": 1
+    },
+    "id": {
+      "$ref": "#/$defs/OutcomeId"
+    },
+    "provenance": {
+      "$ref": "#/$defs/Provenance"
+    },
+    "body": {
+      "$ref": "#/$defs/Outcome"
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "version",
+    "id",
+    "provenance",
+    "body"
+  ],
+  "$defs": {
+    "Outcome": {
+      "description": "The recorded conclusion of a trajectory.",
+      "type": "object",
+      "properties": {
+        "trajectory_id": {
+          "description": "Trajectory this outcome concludes.",
+          "$ref": "#/$defs/TrajectoryId"
+        },
+        "status": {
+          "description": "How the run ended.",
+          "$ref": "#/$defs/OutcomeStatus"
+        },
+        "note": {
+          "description": "Operator note explaining the status; required for anything but `solved`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "metrics": {
+          "description": "Cost of the run.",
+          "$ref": "#/$defs/CostMetrics"
+        },
+        "confirmed_by_human": {
+          "description": "Whether a human confirmed the status rather than it being inferred.",
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "trajectory_id",
+        "status",
+        "metrics",
+        "confirmed_by_human"
+      ]
+    },
+    "TrajectoryId": {
+      "description": "Identifier for a Trajectory record.",
+      "type": "string",
+      "pattern": "^trj_[0-9A-HJKMNP-TV-Z]{26}$"
+    },
+    "OutcomeStatus": {
+      "description": "How a recorded run ended.",
+      "oneOf": [
+        {
+          "description": "The intent was solved and the operator confirmed it.",
+          "type": "string",
+          "const": "solved"
+        },
+        {
+          "description": "The run finished but did not solve the intent.",
+          "type": "string",
+          "const": "failed"
+        },
+        {
+          "description": "The run was abandoned before reaching a conclusion.",
+          "type": "string",
+          "const": "abandoned"
+        }
+      ]
+    },
+    "CostMetrics": {
+      "description": "Integer cost metrics for one run.\n\nEvery value is an integer: canonical JSON rejects floats, because a digest that depends on\nfloat formatting is not reproducible. Ratios are computed at report time from these counters,\nnever stored.",
+      "type": "object",
+      "properties": {
+        "tool_calls": {
+          "description": "Number of tool calls the agent made.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "agent_turns": {
+          "description": "Number of agent turns.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "estimated_input_tokens": {
+          "description": "Estimated input tokens consumed.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "estimated_output_tokens": {
+          "description": "Estimated output tokens produced.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "duration_ms": {
+          "description": "Wall-clock duration of the run.",
+          "type": "integer",
+          "format": "int64"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "tool_calls",
+        "agent_turns",
+        "estimated_input_tokens",
+        "estimated_output_tokens",
+        "duration_ms"
+      ]
+    },
+    "OutcomeId": {
+      "description": "Identifier for a Outcome record.",
+      "type": "string",
+      "pattern": "^out_[0-9A-HJKMNP-TV-Z]{26}$"
+    },
+    "Provenance": {
+      "description": "Provenance recorded alongside every envelope.",
+      "type": "object",
+      "properties": {
+        "produced_by": {
+          "description": "Name and version of the component that produced the record, e.g. `agent-jit/0.1.0`.",
+          "type": "string"
+        },
+        "source": {
+          "description": "How the record entered the system.",
+          "$ref": "#/$defs/ProvenanceSource"
+        },
+        "recorded_at_unix_ms": {
+          "description": "Wall-clock time the record was produced. Volatile: never part of a digest.",
+          "type": "integer",
+          "format": "int64"
+        },
+        "parents": {
+          "description": "Digests of the records this one was derived from, in a stable order.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Digest"
+          },
+          "default": []
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "produced_by",
+        "source",
+        "recorded_at_unix_ms"
+      ]
+    },
+    "ProvenanceSource": {
+      "description": "How a record entered the system.",
+      "oneOf": [
+        {
+          "description": "Captured live from agent hooks.",
+          "type": "string",
+          "const": "recorded"
+        },
+        {
+          "description": "Imported from an exact-shape historical record.",
+          "type": "string",
+          "const": "imported"
+        },
+        {
+          "description": "Derived from other records already in the store.",
+          "type": "string",
+          "const": "derived"
+        },
+        {
+          "description": "Confirmed by a human operator.",
+          "type": "string",
+          "const": "confirmed"
+        }
+      ]
+    },
+    "Digest": {
+      "description": "BLAKE3 digest of a canonical JSON byte string, lowercase hex.",
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    }
+  }
+}

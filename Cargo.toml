@@ -1,0 +1,59 @@
+[workspace]
+resolver = "3"
+members = [
+    "crates/agent-jit-domain",
+    "crates/agent-jit-store",
+    "crates/agent-jit-engine",
+    "crates/agent-jit-cli",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.88.0"
+license = "MIT"
+publish = false
+repository = "https://github.com/0xendale/agent-jit"
+
+[workspace.dependencies]
+agent-jit-domain = { path = "crates/agent-jit-domain" }
+agent-jit-store = { path = "crates/agent-jit-store" }
+agent-jit-engine = { path = "crates/agent-jit-engine" }
+
+blake3 = "1.8.2"
+serde = { version = "1.0.219", features = ["derive"] }
+serde_json = { version = "1.0.140", features = ["preserve_order"] }
+getrandom = "0.3.3"
+regex = "1.11.1"
+rusqlite = { version = "0.37.0", features = ["bundled"] }
+schemars = "1.0.4"
+thiserror = "2.0.12"
+unicode-normalization = "0.1.24"
+
+assert_cmd = "2.0.17"
+insta = { version = "1.43.1", features = ["json"] }
+proptest = "1.7.0"
+predicates = "3.1.3"
+tempfile = "3.20.0"
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+missing_docs = "warn"
+unused_qualifications = "warn"
+
+[workspace.lints.clippy]
+all = { level = "deny", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+todo = "deny"
+unimplemented = "deny"
+dbg_macro = "deny"
+print_stdout = "warn"
+print_stderr = "warn"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = "debuginfo"

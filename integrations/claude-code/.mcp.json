@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "agent-jit": {
+      "command": "{{AGENT_JIT_BIN}}",
+      "args": ["mcp", "serve"]
+    }
+  }
+}
