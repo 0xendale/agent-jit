@@ -1,8 +1,8 @@
 //! Host support contract.
 //!
-//! v1 supports macOS arm64 and nothing else (see `docs/adr/0001-mvp-boundary.md`). The sandbox
-//! profile, the pinned sidecar, and the recorded command profiles are all platform-specific, so
-//! running elsewhere would produce evidence that means nothing.
+//! v1 supports macOS arm64 and nothing else. The sandbox profile, the pinned sidecar, and the
+//! recorded command profiles are all platform-specific, so running elsewhere would produce
+//! evidence that means nothing.
 
 /// The only supported operating system.
 pub const SUPPORTED_OS: &str = "macos";

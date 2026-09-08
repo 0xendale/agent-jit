@@ -1,12 +1,11 @@
 //! Opt-in importer for Claude Code's internal transcript JSONL.
 //!
-//! Claude's transcript format is an implementation detail, not a contract (see
-//! `docs/adr/0002-claude-code-first-runtime.md`). This importer therefore exists only to backfill
-//! *historical* sessions recorded before the recorder was installed, and it is deliberately
-//! hostile to ambiguity: a file is imported only when it matches a named profile exactly, and every
-//! other file is rejected with a reason code and counted. There is no permissive auto-detection,
-//! because a misread historical file would silently inflate the corpus that a stop/go gate divides
-//! by.
+//! Claude's transcript format is an implementation detail, not a contract. This importer therefore
+//! exists only to backfill *historical* sessions recorded before the recorder was installed, and it
+//! is deliberately hostile to ambiguity: a file is imported only when it matches a named profile
+//! exactly, and every other file is rejected with a reason code and counted. There is no permissive
+//! auto-detection, because a misread historical file would silently inflate the corpus that a
+//! stop/go gate divides by.
 //!
 //! Nothing here bypasses the live pipeline: accepted records go through the same redaction and the
 //! same domain contracts as hook events, and carry provenance marking them as imported.

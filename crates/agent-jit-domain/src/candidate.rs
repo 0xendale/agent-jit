@@ -1,8 +1,8 @@
 //! Manual grouping and the candidate contract inferred from a group.
 //!
-//! Grouping is a human act in v1 (see `docs/adr/0001-mvp-boundary.md`): a [`Group`] records which
-//! trajectories an operator declared to be the same solved intent, and a [`CandidateContract`]
-//! records the typed inputs and outputs that a human confirmed for it.
+//! Grouping is a human act in v1: a [`Group`] records which trajectories an operator declared to be
+//! the same solved intent, and a [`CandidateContract`] records the typed inputs and outputs that a
+//! human confirmed for it.
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};

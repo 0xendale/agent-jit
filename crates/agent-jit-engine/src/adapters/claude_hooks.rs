@@ -2,9 +2,8 @@
 //!
 //! This is the only place the product knows what Claude Code sends. It reads the *documented* hook
 //! payload from stdin and nothing else: `transcript_path` is recorded as provenance and never
-//! opened, because Claude's internal transcript JSONL is not a stable contract and reading it
-//! would make the recorder depend on an implementation detail (see
-//! `docs/adr/0002-claude-code-first-runtime.md`).
+//! opened, because Claude's internal transcript JSONL is not a stable contract and reading it would
+//! make the recorder depend on an implementation detail.
 //!
 //! Unknown fields are kept — bounded and redacted — as extension metadata rather than dropped: a
 //! later Claude release adding a field should show up in the evidence, not vanish. They are not
