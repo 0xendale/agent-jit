@@ -270,7 +270,7 @@ fn run_synthesizes_session_end_for_sessions_the_plugin_observed() {
             "#!/bin/sh\nif [ \"$1\" = '--version' ]; then printf '1.18.29 (opencode)\\n'; exit 0; fi\n\
              cfg_dir=$(dirname \"$OPENCODE_CONFIG\")\n\
              mkdir -p \"$cfg_dir/sessions\"\n\
-             printf '{{\"directory\":\"{repo}\"}}' > \"$cfg_dir/sessions/{SESSION}.json\"\n",
+             printf '{{\"directory\":\"{repo}\",\"runtime_version\":\"1.18.28\"}}' > \"$cfg_dir/sessions/{SESSION}.json\"\n",
             repo = repo.path().display()
         ),
     )
@@ -305,6 +305,20 @@ fn run_synthesizes_session_end_for_sessions_the_plugin_observed() {
             agent_jit_engine::adapters::claude_hooks::HookEventKind::SessionEnd
         )),
         "expected a session-end event"
+    );
+    let session_end = read
+        .accepted
+        .iter()
+        .find(|segment| {
+            matches!(
+                segment.payload.kind,
+                agent_jit_engine::adapters::claude_hooks::HookEventKind::SessionEnd
+            )
+        })
+        .unwrap();
+    assert_eq!(
+        session_end.payload.claude_version.as_deref(),
+        Some("1.18.28")
     );
 
     // The marker is consumed so a later run cannot resurrect the session.

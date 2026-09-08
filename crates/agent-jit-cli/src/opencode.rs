@@ -251,13 +251,15 @@ fn run_command(args: &[String]) -> Result<Rendered, CommandError> {
 
     let executable = opencode_bin.unwrap_or_else(|| "opencode".to_owned());
     let mut command = Command::new(&executable);
-    if let Ok(version) = crate::doctor_recorder::runtime_version(&executable) {
+    let runtime_version = crate::doctor_recorder::runtime_version(&executable).ok();
+    if let Some(version) = &runtime_version {
         command.env("AGENT_JIT_RUNTIME_VERSION", version);
     } else {
         command.env_remove("AGENT_JIT_RUNTIME_VERSION");
     }
     command
         .current_dir(&identity.worktree_root)
+        .env("PWD", &identity.worktree_root)
         // Every argument the operator passed, in order. Injection is environment-only: the
         // runtime's argv is never rewritten.
         .args(&opencode_args)
@@ -278,7 +280,8 @@ fn run_command(args: &[String]) -> Result<Rendered, CommandError> {
         )
     })?;
 
-    let sessions_ended = synthesize_session_ends(&paths, &materialized.directory);
+    let sessions_ended =
+        synthesize_session_ends(&paths, &materialized.directory, runtime_version.as_deref());
 
     let report = json!({
         "repository_id": identity.repo_id.to_string(),
@@ -314,7 +317,11 @@ fn run_command(args: &[String]) -> Result<Rendered, CommandError> {
 /// A plugin cannot observe its own process exit, so the launcher is the only party that knows
 /// the runtime is gone. Markers whose ingestion fails are kept: the next run retries them, and
 /// the recorder deduplicates by canonical digest.
-fn synthesize_session_ends(paths: &AppPaths, plugin_dir: &Path) -> usize {
+fn synthesize_session_ends(
+    paths: &AppPaths,
+    plugin_dir: &Path,
+    runtime_version: Option<&str>,
+) -> usize {
     let sessions = plugin_dir.join("sessions");
     let Ok(entries) = std::fs::read_dir(&sessions) else {
         return 0;
@@ -338,17 +345,18 @@ fn synthesize_session_ends(paths: &AppPaths, plugin_dir: &Path) -> usize {
         let Ok(contents) = std::fs::read_to_string(&marker) else {
             continue;
         };
-        let directory = serde_json::from_str::<serde_json::Value>(&contents)
-            .ok()
-            .and_then(|value| {
-                value
-                    .get("directory")
-                    .and_then(serde_json::Value::as_str)
-                    .map(str::to_owned)
-            })
-            .unwrap_or_default();
+        let Ok(session) = serde_json::from_str::<serde_json::Value>(&contents) else {
+            continue;
+        };
+        let Some(directory) = session.get("directory").and_then(serde_json::Value::as_str) else {
+            continue;
+        };
+        let session_version = session
+            .get("runtime_version")
+            .and_then(serde_json::Value::as_str)
+            .or(runtime_version);
 
-        if deliver_session_end(paths, &session_id, &directory) {
+        if deliver_session_end(paths, &session_id, directory, session_version) {
             // The marker is consumed only after a confirmed delivery.
             let _ = std::fs::remove_file(&marker);
             ended += 1;
@@ -358,7 +366,12 @@ fn synthesize_session_ends(paths: &AppPaths, plugin_dir: &Path) -> usize {
 }
 
 /// Feeds one synthesized session-end event to the recorder and waits for its verdict.
-fn deliver_session_end(paths: &AppPaths, session_id: &str, directory: &str) -> bool {
+fn deliver_session_end(
+    paths: &AppPaths,
+    session_id: &str,
+    directory: &str,
+    runtime_version: Option<&str>,
+) -> bool {
     let payload = json!({
         "event": "session.ended",
         "session_id": session_id,
@@ -368,15 +381,21 @@ fn deliver_session_end(paths: &AppPaths, session_id: &str, directory: &str) -> b
     .to_string();
 
     let attempt = (|| -> std::io::Result<std::process::ExitStatus> {
-        let mut child =
-            Command::new(std::env::current_exe().unwrap_or_else(|_| PathBuf::from("agent-jit")))
-                .env(crate::app::HOME_OVERRIDE, &paths.home)
-                .env("AGENT_JIT_HOOK_ADAPTER", "opencode")
-                .args(["hook", "ingest", "--event", "session-end"])
-                .stdin(Stdio::piped())
-                .stdout(Stdio::null())
-                .stderr(Stdio::null())
-                .spawn()?;
+        let mut command =
+            Command::new(std::env::current_exe().unwrap_or_else(|_| PathBuf::from("agent-jit")));
+        command
+            .env(crate::app::HOME_OVERRIDE, &paths.home)
+            .env("AGENT_JIT_HOOK_ADAPTER", "opencode")
+            .args(["hook", "ingest", "--event", "session-end"])
+            .stdin(Stdio::piped())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null());
+        if let Some(version) = runtime_version {
+            command.env("AGENT_JIT_RUNTIME_VERSION", version);
+        } else {
+            command.env_remove("AGENT_JIT_RUNTIME_VERSION");
+        }
+        let mut child = command.spawn()?;
         if let Some(mut stdin) = child.stdin.take() {
             stdin.write_all(payload.as_bytes())?;
         }

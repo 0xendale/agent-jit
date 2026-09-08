@@ -36,20 +36,24 @@ fn recorder_reports_failed_checks_when_executables_are_unavailable() {
         report["error"]["details"]["checks"]["claude"]["status"],
         "fail"
     );
+    assert_eq!(
+        report["error"]["details"]["checks"]["opencode"]["status"],
+        "fail"
+    );
 }
 
 #[test]
 fn recorder_passes_when_local_prerequisites_and_hook_round_trip_work() {
-    // Given: migrated state, generated plugin, and a deterministic version executable.
+    // Given: migrated state, generated plugin, and deterministic version executables.
     let home = tempfile::tempdir().unwrap();
     let tools = tempfile::tempdir().unwrap();
-    let executable = tools.path().join("claude");
-    std::fs::write(
-        &executable,
-        "#!/bin/sh\nprintf '2.1.263 (Claude Code)\\n'\n",
-    )
-    .unwrap();
-    std::fs::set_permissions(&executable, std::fs::Permissions::from_mode(0o700)).unwrap();
+    let claude = tools.path().join("claude");
+    std::fs::write(&claude, "#!/bin/sh\nprintf '2.1.263 (Claude Code)\\n'\n").unwrap();
+    let opencode = tools.path().join("opencode");
+    std::fs::write(&opencode, "#!/bin/sh\nprintf '1.18.29\\n'\n").unwrap();
+    for executable in [&claude, &opencode] {
+        std::fs::set_permissions(executable, std::fs::Permissions::from_mode(0o700)).unwrap();
+    }
     corpus_support::bin(home.path())
         .args(["store", "migrate", "--json"])
         .assert()
@@ -69,8 +73,12 @@ fn recorder_passes_when_local_prerequisites_and_hook_round_trip_work() {
     // Then: every check passes, with no diagnostic trajectory added.
     let report = corpus_support::json(&result.get_output().stdout);
     assert_eq!(report["status"], "pass");
-    assert_eq!(report["checks"].as_object().unwrap().len(), 7);
+    assert_eq!(report["checks"].as_object().unwrap().len(), 8);
     assert_eq!(report["checks"]["claude"]["details"]["version"], "2.1.263");
+    assert_eq!(
+        report["checks"]["opencode"]["details"]["version"],
+        "1.18.29"
+    );
     assert_eq!(
         report["checks"]["hook_round_trip"]["details"]["trajectory_created"],
         false
