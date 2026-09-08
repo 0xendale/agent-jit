@@ -1,7 +1,7 @@
 //! Fails the build on any target outside the supported platform contract.
 //!
-//! macOS arm64 is the only supported target (see `docs/adr/0001-mvp-boundary.md`). The check runs
-//! at build time so an unsupported binary is never produced, rather than failing at first use.
+//! macOS arm64 is the only supported target. The check runs at build time so an unsupported binary
+//! is never produced, rather than failing at first use.
 
 fn main() {
     println!("cargo::rerun-if-changed=build.rs");

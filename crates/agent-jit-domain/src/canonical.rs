@@ -1,8 +1,7 @@
 //! Canonical JSON and reproducible digests.
 //!
 //! Every persisted record is digested through one canonical form so that decisions taken today can
-//! be recomputed and audited later. The rules are deliberately narrow (see
-//! `docs/adr/0005-canonical-json-digests.md`):
+//! be recomputed and audited later. The rules are deliberately narrow:
 //!
 //! * object keys are sorted by Unicode scalar value after NFC normalization;
 //! * array order is significant and preserved;

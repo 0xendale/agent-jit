@@ -3,9 +3,8 @@
 //! This is the only place the product knows what the materialized `OpenCode` plugin forwards. The
 //! plugin subscribes to `OpenCode`'s *documented* TypeScript plugin hooks (`tool.execute.before`,
 //! `tool.execute.after`) and its event bus (`session.created`, `session.idle`, user messages),
-//! then writes a bridge payload to the recorder's stdin (see
-//! `docs/adr/0009-opencode-second-runtime.md`). `OpenCode`'s internal state files are never read:
-//! they are not a stable contract, exactly like Claude's transcript JSONL.
+//! then writes a bridge payload to the recorder's stdin. `OpenCode`'s internal state files are
+//! never read: they are not a stable contract, exactly like Claude's transcript JSONL.
 //!
 //! The shared event model lives in [`super::claude_hooks`]; only the payload vocabulary differs.
 //! The `claude_version` slot on [`NormalizedHook`] carries the instrumented runtime's version —
