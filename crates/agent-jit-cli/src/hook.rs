@@ -11,7 +11,8 @@
 use std::io::{self, Write as _};
 
 use agent_jit_domain::redaction::{PathAliases, Redactor};
-use agent_jit_engine::adapters::claude_hooks::{HookEventKind, normalize};
+use agent_jit_engine::adapters::claude_hooks::{HookEventKind, NormalizedHook};
+use agent_jit_engine::adapters::opencode_hooks;
 use agent_jit_engine::normalize::read_bounded;
 use agent_jit_engine::recorder::SegmentStore;
 use agent_jit_engine::spool::{Spool, SpoolKind};
@@ -25,6 +26,46 @@ use crate::output::Rendered;
 const HOOK_INPUT_LIMIT: usize = 1024 * 1024;
 
 const USAGE: &str = "usage: agent-jit hook ingest --event <session-start|user-prompt-submit|pre-tool-use|post-tool-use|post-tool-use-failure|stop|session-end> [--claude-version <version>]";
+
+/// Which runtime's bridge produced the payload. Selects the adapter that normalizes it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Adapter {
+    Claude,
+    Opencode,
+}
+
+impl Adapter {
+    /// Reads the adapter from the launcher's environment. Unset means the Claude bridge, which
+    /// never needed to name itself.
+    fn from_environment() -> Result<Self, CommandError> {
+        match std::env::var("AGENT_JIT_HOOK_ADAPTER").as_deref() {
+            Ok("claude") | Err(_) => Ok(Self::Claude),
+            Ok("opencode") => Ok(Self::Opencode),
+            Ok(other) => Err(CommandError::usage(format!(
+                "unknown hook adapter: {other}\n{USAGE}"
+            ))),
+        }
+    }
+
+    /// Normalizes one payload through this adapter's contract.
+    fn normalize(
+        self,
+        kind: HookEventKind,
+        text: &str,
+        redactor: &Redactor,
+        runtime_version: Option<&str>,
+    ) -> Result<NormalizedHook, agent_jit_engine::adapters::claude_hooks::HookError> {
+        match self {
+            Self::Claude => agent_jit_engine::adapters::claude_hooks::normalize(
+                kind,
+                text,
+                redactor,
+                runtime_version,
+            ),
+            Self::Opencode => opencode_hooks::normalize(kind, text, redactor, runtime_version),
+        }
+    }
+}
 
 /// Dispatches a `hook` subcommand.
 ///
@@ -55,7 +96,8 @@ pub fn run(args: &[String]) -> Result<Rendered, CommandError> {
 
 /// Reads one hook payload from stdin and appends it to the spool.
 fn ingest(args: &[String]) -> Result<Rendered, CommandError> {
-    let (kind, claude_version) = parse_arguments(args)?;
+    let (kind, runtime_version) = parse_arguments(args)?;
+    let adapter = Adapter::from_environment()?;
 
     let paths = AppPaths::resolve()?;
     paths.ensure()?;
@@ -64,7 +106,7 @@ fn ingest(args: &[String]) -> Result<Rendered, CommandError> {
     let segments = SegmentStore::open(&paths.spool.join("segments"))
         .map_err(|error| CommandError::refused(error.code(), error.to_string()))?;
 
-    match capture(kind, claude_version.as_deref(), &segments) {
+    match capture(kind, adapter, runtime_version.as_deref(), &segments) {
         Ok(()) => Ok(Rendered::Text(String::new())),
         Err(fault) => {
             // Record the fault, tell the operator on stderr, and let Claude carry on.
@@ -93,7 +135,8 @@ struct Fault {
 /// Reads, normalizes, and spools one event.
 fn capture(
     kind: HookEventKind,
-    claude_version: Option<&str>,
+    adapter: Adapter,
+    runtime_version: Option<&str>,
     segments: &SegmentStore,
 ) -> Result<(), Fault> {
     let input = read_bounded(&mut io::stdin().lock(), HOOK_INPUT_LIMIT).map_err(|error| Fault {
@@ -106,10 +149,12 @@ fn capture(
         detail: error.to_string(),
     })?;
 
-    let hook = normalize(kind, text, &redactor(), claude_version).map_err(|error| Fault {
-        code: error.code(),
-        detail: error.to_string(),
-    })?;
+    let hook = adapter
+        .normalize(kind, text, &redactor(), runtime_version)
+        .map_err(|error| Fault {
+            code: error.code(),
+            detail: error.to_string(),
+        })?;
 
     // One immutable segment per event: concurrent hooks are separate processes, and a shared
     // append-only file would let a killed process leave a fragment that reads like a record.
@@ -137,7 +182,11 @@ fn redactor() -> Redactor {
 /// Parses `--event` and `--claude-version`.
 fn parse_arguments(args: &[String]) -> Result<(HookEventKind, Option<String>), CommandError> {
     let mut kind: Option<HookEventKind> = None;
-    let mut claude_version = std::env::var("AGENT_JIT_CLAUDE_VERSION").ok();
+    // The launcher names the runtime it instrumented; the older name is honored so a launcher
+    // from a previous build keeps working.
+    let mut runtime_version = std::env::var("AGENT_JIT_RUNTIME_VERSION")
+        .or_else(|_| std::env::var("AGENT_JIT_CLAUDE_VERSION"))
+        .ok();
 
     let mut remaining = args.iter();
     while let Some(argument) = remaining.next() {
@@ -151,7 +200,7 @@ fn parse_arguments(args: &[String]) -> Result<(HookEventKind, Option<String>), C
                 );
             }
             "--claude-version" => {
-                claude_version = Some(
+                runtime_version = Some(
                     remaining
                         .next()
                         .ok_or_else(|| CommandError::usage(USAGE))?
@@ -167,5 +216,5 @@ fn parse_arguments(args: &[String]) -> Result<(HookEventKind, Option<String>), C
     }
 
     let kind = kind.ok_or_else(|| CommandError::usage(USAGE))?;
-    Ok((kind, claude_version))
+    Ok((kind, runtime_version))
 }

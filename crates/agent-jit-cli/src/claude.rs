@@ -207,7 +207,7 @@ fn create_dir(path: &Path) -> Result<(), CommandError> {
 
 /// `agent-jit claude materialize`.
 fn materialize_command(args: &[String]) -> Result<Rendered, CommandError> {
-    let as_json = parse_flags(args)?;
+    let as_json = parse_flags(args, USAGE)?;
     let paths = AppPaths::resolve()?;
     paths.ensure()?;
     let materialized = materialize(&paths)?;
@@ -229,7 +229,8 @@ fn materialize_command(args: &[String]) -> Result<Rendered, CommandError> {
 
 /// `agent-jit claude run`.
 fn run_command(args: &[String]) -> Result<Rendered, CommandError> {
-    let (repo, claude_bin, as_json, claude_args) = parse_run_arguments(args)?;
+    let (repo, claude_bin, as_json, claude_args) =
+        parse_run_arguments(args, "--claude-bin", USAGE)?;
 
     // The repository is validated before Claude is launched: recording against something that is
     // not the repository the operator named would produce evidence nobody can attribute.
@@ -244,9 +245,9 @@ fn run_command(args: &[String]) -> Result<Rendered, CommandError> {
     let executable = claude_bin.unwrap_or_else(|| "claude".to_owned());
     let mut command = Command::new(&executable);
     if let Ok(version) = crate::doctor_recorder::runtime_version(&executable) {
-        command.env("AGENT_JIT_CLAUDE_VERSION", version);
+        command.env("AGENT_JIT_RUNTIME_VERSION", version);
     } else {
-        command.env_remove("AGENT_JIT_CLAUDE_VERSION");
+        command.env_remove("AGENT_JIT_RUNTIME_VERSION");
     }
     command
         .current_dir(&identity.worktree_root)
@@ -295,7 +296,7 @@ fn run_command(args: &[String]) -> Result<Rendered, CommandError> {
 
 /// `agent-jit claude uninstall`.
 fn uninstall_command(args: &[String]) -> Result<Rendered, CommandError> {
-    let as_json = parse_flags(args)?;
+    let as_json = parse_flags(args, USAGE)?;
     let paths = AppPaths::resolve()?;
     let root = paths.data.join(PLUGIN_ROOT);
 
