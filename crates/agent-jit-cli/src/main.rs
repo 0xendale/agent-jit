@@ -18,6 +18,7 @@ mod doctor;
 mod doctor_recorder;
 mod error;
 mod hook;
+mod opencode;
 mod output;
 mod persistence_redaction;
 mod repo;
@@ -51,6 +52,7 @@ const COMMANDS: &[(&str, &str)] = &[
     ("sandbox", "verify the pinned sandbox sidecar"),
     ("mcp", "serve the single jit.query MCP tool over stdio"),
     ("claude", "launch Claude Code with the recorder plugin"),
+    ("opencode", "launch OpenCode with the recorder bridge"),
     ("benchmark", "run and report the paired benchmark"),
     ("install", "materialize the local Claude Code plugin"),
     (
@@ -96,6 +98,7 @@ fn run(args: &[String]) -> Result<Rendered, CommandError> {
         "--help" | "-h" | "help" => Ok(Rendered::Text(usage())),
         "paths" => paths(&args[1..]),
         "claude" => claude::run(&args[1..]),
+        "opencode" => opencode::run(&args[1..]),
         "corpus" => corpus::run(&args[1..]),
         "doctor" => doctor::run(&args[1..]),
         "schema" => schema::run(&args[1..]),

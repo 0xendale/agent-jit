@@ -28,6 +28,7 @@ pub fn run(as_json: bool) -> Result<Rendered, CommandError> {
     );
     checks.insert("git".into(), check(version("git", "git version ")));
     checks.insert("claude".into(), check(version("claude", "")));
+    checks.insert("opencode".into(), check(version("opencode", "")));
     match AppPaths::resolve() {
         Ok(paths) => {
             checks.insert(

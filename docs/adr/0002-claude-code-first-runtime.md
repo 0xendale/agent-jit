@@ -1,6 +1,6 @@
 # ADR 0002 — Claude Code is the first (and only) instrumented runtime
 
-- Status: accepted
+- Status: accepted (runtime-exclusivity clause superseded by ADR-0009)
 - Date: 2026-08-26
 
 ## Context

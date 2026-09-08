@@ -28,6 +28,7 @@ const RESERVED: &[&str] = &[
     "sandbox",
     "mcp",
     "claude",
+    "opencode",
     "benchmark",
     "install",
     "uninstall",
@@ -35,7 +36,7 @@ const RESERVED: &[&str] = &[
 
 /// Commands that already do something; the rest must report `not_implemented`.
 const IMPLEMENTED: &[&str] = &[
-    "paths", "doctor", "schema", "repo", "store", "hook", "trace", "claude", "corpus",
+    "paths", "doctor", "schema", "repo", "store", "hook", "trace", "claude", "opencode", "corpus",
 ];
 
 fn bin(home: &Path) -> Command {

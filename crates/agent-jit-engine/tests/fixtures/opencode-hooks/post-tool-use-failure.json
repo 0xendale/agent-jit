@@ -1,0 +1,1 @@
+{"event":"tool.execute.after","session_id":"b2c3d4e5-1111-2222-3333-444455556666","directory":"/Users/someone/code/pipeline-viz","tool_name":"bash","tool_input":{"command":"cargo test --workspace"},"tool_response":{"title":"cargo test","output":""},"error":"exited with code 101"}

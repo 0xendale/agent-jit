@@ -97,7 +97,7 @@ Candidate lifecycle:
 - Fixed, allowlisted primitives such as `workspace.packages_for_diff`, `repo.generated_artifacts`, `checks.for_package`, and `checks.run`.
 - JSON Schema contracts for capability inputs, outputs, and primitive boundaries.
 - Git commit, lockfiles, config files, and relevant source paths used as dependency fingerprints.
-- Existing agent integration via hooks or a tool-call proxy; no model modification required.
+- Instrumented agent runtimes: Claude Code first, OpenCode second (ADR-0009). Both integrate through documented hook/plugin payloads only — never internal state files — with no model modification required.
 - One discovery surface, such as `jit.query(intent)`, instead of exposing every compiled capability globally.
 
 ### Safety Model
@@ -112,7 +112,7 @@ Candidate lifecycle:
 
 ## 7. MVP Scope
 
-Build a manual JIT compiler for one coding-agent runtime and one repository. The MVP proves value before investing in automatic intent mining or synthesis.
+Build a manual JIT compiler for two instrumented coding-agent runtimes — Claude Code first, OpenCode second (pulled forward from Phase 2 by ADR-0009) — and one repository. The MVP proves value before investing in automatic intent mining or synthesis.
 
 Included:
 
@@ -269,7 +269,7 @@ Pin model, prompts, repository commit, environment, and task set. Compare correc
 
 - Add candidate ranking, dependency fingerprints, automatic stale detection, and periodic replay.
 - Support 3–5 read-only primitive families.
-- Integrate a second repository and agent runtime.
+- Integrate a second repository. The second agent runtime (OpenCode) was pulled forward into the current build by ADR-0009.
 
 Automatic intent clustering remains optional research. Add it only after manual grouping proves product value and a separate benchmark shows high grouping precision without hiding ambiguous cases.
 
