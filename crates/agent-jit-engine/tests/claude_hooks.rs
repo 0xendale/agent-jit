@@ -31,7 +31,7 @@ fn claude_hook_session_start_is_normalized() {
     assert_eq!(hook.adapter_schema, ADAPTER_SCHEMA);
     assert_eq!(hook.kind, HookEventKind::SessionStart);
     assert_eq!(hook.session_key, "b2c3d4e5-1111-2222-3333-444455556666");
-    assert_eq!(hook.cwd, "/Users/someone/code/pipeline-viz");
+    assert_eq!(hook.cwd, "/Users/someone/code/example-repo");
     assert_eq!(hook.claude_version.as_deref(), Some("2.0.0"));
     assert!(
         matches!(hook.payload, HookPayload::SessionStart { ref source } if source == "startup")
@@ -229,7 +229,7 @@ fn claude_hook_transcript_path_is_provenance_and_is_never_opened() {
     // records the path and never reads the file. Claude's transcript JSONL is not a live contract.
     let payload = serde_json::json!({
         "session_id": "b2c3d4e5-1111-2222-3333-444455556666",
-        "cwd": "/Users/someone/code/pipeline-viz",
+        "cwd": "/Users/someone/code/example-repo",
         "hook_event_name": "Stop",
         "stop_hook_active": false,
         "transcript_path": "/proc/nonexistent/definitely-not-here.jsonl"
@@ -248,7 +248,7 @@ fn claude_hook_a_directory_as_transcript_path_still_normalizes() {
     let directory = tempfile::tempdir().unwrap();
     let payload = serde_json::json!({
         "session_id": "b2c3d4e5-1111-2222-3333-444455556666",
-        "cwd": "/Users/someone/code/pipeline-viz",
+        "cwd": "/Users/someone/code/example-repo",
         "hook_event_name": "Stop",
         "stop_hook_active": false,
         "transcript_path": directory.path().to_string_lossy()
