@@ -563,3 +563,66 @@ fn partial_residue_of_a_finalized_session_is_drained_without_recounting_work() {
         "the drain adds no events"
     );
 }
+
+#[test]
+fn an_oversize_session_skip_is_recorded_in_the_store_once() {
+    let home = tempfile::tempdir().unwrap();
+    let repository = tempfile::tempdir().unwrap();
+    init_repo(repository.path());
+    bin(home.path())
+        .args(["store", "migrate", "--json"])
+        .assert()
+        .success();
+
+    // Feed enough payload for the aggregate to exceed the 8 MiB trajectory ceiling: each
+    // accepted event carries two capped-at-64-KiB fields, so 70 filler events clear it.
+    let mut event = serde_json::json!({
+        "tool_name": "Bash",
+        "tool_input": {"command": "x".repeat(70 * 1024)},
+        "tool_response": {"stdout": "y".repeat(70 * 1024)}
+    });
+    for index in 0..70 {
+        // Distinct payloads so adjacent-duplicate collapsing never folds two into one.
+        event["tool_name"] = serde_json::json!(format!("Bash{index}"));
+        ingest(
+            home.path(),
+            "post-tool-use",
+            &payload("PostToolUse", repository.path(), &event),
+        );
+    }
+    ingest(
+        home.path(),
+        "stop",
+        &payload(
+            "Stop",
+            repository.path(),
+            &serde_json::json!({"stop_hook_active": false}),
+        ),
+    );
+
+    let connection = rusqlite::Connection::open(home.path().join("data/state.sqlite3")).unwrap();
+    let rows = |connection: &rusqlite::Connection| -> usize {
+        connection
+            .query_row(
+                "SELECT COUNT(*) FROM health_events WHERE code='recorder_session_too_large' \
+                 AND detail=?1",
+                [SESSION],
+                |row| row.get::<_, usize>(0),
+            )
+            .unwrap()
+    };
+
+    for expected_rows in [1, 1] {
+        let recovered = bin(home.path())
+            .args(["store", "recover", "--json"])
+            .assert()
+            .success();
+        let report = json(&recovered.get_output().stdout);
+        assert_eq!(
+            report["skipped"].as_array().unwrap()[0]["code"],
+            "recorder_session_too_large",
+            "{report}"
+        );
+        assert_eq!(rows(&connection), expected_rows);
+    }
+}

@@ -1027,6 +1027,20 @@ impl Store {
         Ok(())
     }
 
+    /// Whether a health event with this exact code and detail is already recorded.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StoreError`] when the query fails.
+    pub fn has_health_event(&self, code: &str, detail: &str) -> Result<bool, StoreError> {
+        let count: i64 = self.connection.query_row(
+            "SELECT COUNT(*) FROM health_events WHERE code = ?1 AND detail = ?2",
+            [code, detail],
+            |row| row.get(0),
+        )?;
+        Ok(count > 0)
+    }
+
     /// Counts health events with a given code.
     ///
     /// # Errors

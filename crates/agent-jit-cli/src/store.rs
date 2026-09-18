@@ -155,16 +155,10 @@ fn recover(as_json: bool) -> Result<Rendered, CommandError> {
         let aggregate = match recorder.aggregate(&session_key) {
             Ok(aggregate) => aggregate,
             Err(error) => {
-                // Nothing was accepted, so the directory can never complete: discard it rather
-                // than reporting the same `recorder_empty_session` skip on every recover. This
-                // also removes `.tmp-` leftovers, which only a full discard deletes.
-                if error.code() == "recorder_empty_session"
-                    && segments.discard_session(&session_key).is_ok()
-                {
-                    drained.push(json!({"session": session_key}));
-                } else {
-                    skipped.push(json!({"session": session_key, "code": error.code()}));
+                if skipped_or_drained(&mut store, &segments, &session_key, &error, &mut drained) {
+                    continue;
                 }
+                skipped.push(json!({"session": session_key, "code": error.code()}));
                 continue;
             }
         };
@@ -236,4 +230,33 @@ fn recover(as_json: bool) -> Result<Rendered, CommandError> {
         skipped.len(),
         quarantined
     )))
+}
+
+/// Classifies one refused aggregate by trying the drain and the once-per-session health record.
+///
+/// Returns whether the session was classified and should not be looked at again.
+fn skipped_or_drained(
+    store: &mut Store,
+    segments: &SegmentStore,
+    session_key: &str,
+    error: &agent_jit_engine::recorder::RecorderError,
+    drained: &mut Vec<serde_json::Value>,
+) -> bool {
+    // Nothing was accepted, so the directory can never complete: discard it rather than reporting
+    // the same `recorder_empty_session` skip on every recover. This also removes `.tmp-`
+    // leftovers, which only a full discard deletes.
+    if error.code() == "recorder_empty_session" && segments.discard_session(session_key).is_ok() {
+        drained.push(json!({"session": session_key}));
+        return true;
+    }
+    // An oversize spool stays skipped forever by design; the store alone must still show the loss,
+    // so it is recorded once per session.
+    if error.code() == "recorder_session_too_large"
+        && let Ok(false) = store.has_health_event(error.code(), session_key)
+    {
+        if let Err(failure) = store.record_health_event(error.code(), session_key) {
+            let _ = crate::trace::refusal(&failure);
+        }
+    }
+    false
 }
