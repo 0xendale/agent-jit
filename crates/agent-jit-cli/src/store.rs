@@ -186,6 +186,11 @@ fn recover(as_json: bool) -> Result<Rendered, CommandError> {
         }
 
         if !aggregate.complete {
+            segments
+                .clear_temporary_files(&session_key)
+                .map_err(|error| {
+                    CommandError::new(error.code(), error.to_string(), ExitClass::Internal)
+                })?;
             pending.push(json!({
                 "session": session_key,
                 "events": aggregate.events.len(),
@@ -258,5 +263,6 @@ fn skipped_or_drained(
             let _ = crate::trace::refusal(&failure);
         }
     }
+    let _ = segments.clear_temporary_files(session_key);
     false
 }

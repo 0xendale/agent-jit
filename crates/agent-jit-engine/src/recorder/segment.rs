@@ -325,6 +325,43 @@ impl SegmentStore {
         })
     }
 
+    /// Removes the temporary files a killed ingest left inside one session's directory.
+    ///
+    /// By construction a `.tmp-` file never became a segment: the rename moved all of it or none
+    /// of it, so the remainder is residue, not evidence.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SegmentWriteError`] when the directory cannot be read or a file cannot be
+    /// removed.
+    pub fn clear_temporary_files(&self, session_key: &str) -> Result<(), SegmentWriteError> {
+        let directory = self.root.join(safe_session_key(session_key)?);
+        if !directory.exists() {
+            return Ok(());
+        }
+        for entry in std::fs::read_dir(&directory).map_err(|error| SegmentWriteError::Io {
+            path: directory.display().to_string(),
+            reason: error.to_string(),
+        })? {
+            let entry = entry.map_err(|error| SegmentWriteError::Io {
+                path: directory.display().to_string(),
+                reason: error.to_string(),
+            })?;
+            let path = entry.path();
+            let name = path.file_name().and_then(|name| name.to_str());
+            if path.is_file()
+                && name.is_some_and(|name| name.starts_with(TEMP_PREFIX))
+                && std::fs::remove_file(&path).is_err()
+            {
+                return Err(SegmentWriteError::Io {
+                    path: path.display().to_string(),
+                    reason: "temporary file not removable".to_owned(),
+                });
+            }
+        }
+        Ok(())
+    }
+
     /// Moves an untrustworthy segment aside and reports it.
     fn quarantine(
         &self,

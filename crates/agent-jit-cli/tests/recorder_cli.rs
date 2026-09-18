@@ -626,3 +626,57 @@ fn an_oversize_session_skip_is_recorded_in_the_store_once() {
         assert_eq!(rows(&connection), expected_rows);
     }
 }
+
+#[test]
+fn recovery_removes_the_temporary_files_a_killed_ingest_left_behind() {
+    let home = tempfile::tempdir().unwrap();
+    let repository = tempfile::tempdir().unwrap();
+    init_repo(repository.path());
+    bin(home.path())
+        .args(["store", "migrate", "--json"])
+        .assert()
+        .success();
+
+    ingest(
+        home.path(),
+        "user-prompt-submit",
+        &payload(
+            "UserPromptSubmit",
+            repository.path(),
+            &serde_json::json!({"prompt": "still working"}),
+        ),
+    );
+    let session_directory = home.path().join("cache/spool/segments").join(SESSION);
+    std::fs::write(session_directory.join(".tmp-42-stop.json"), b"{}").unwrap();
+
+    let report = json(
+        &bin(home.path())
+            .args(["store", "recover", "--json"])
+            .assert()
+            .success()
+            .get_output()
+            .stdout,
+    );
+    assert_eq!(report["pending"].as_array().unwrap().len(), 1, "{report}");
+    assert!(
+        !session_directory.join(".tmp-42-stop.json").exists(),
+        "the leftover a killed ingest could not finish is not evidence"
+    );
+    let segments_left = std::fs::read_dir(&session_directory).unwrap().count();
+    assert!(segments_left >= 1, "a real open segment survives");
+    let listed = json(
+        &bin(home.path())
+            .args([
+                "trace",
+                "list",
+                "--repo",
+                repository.path().to_str().unwrap(),
+                "--json",
+            ])
+            .assert()
+            .success()
+            .get_output()
+            .stdout,
+    );
+    assert_eq!(listed["count"], 0, "no trajectory exists yet");
+}
