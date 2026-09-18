@@ -12,7 +12,7 @@ use agent_jit_store::{Store, StoreError};
 use serde_json::json;
 
 use crate::adapters::claude_hooks::{HookEventKind, HookPayload};
-use crate::metrics::{MetricInputs, compute_trace_metrics};
+use crate::metrics::{MetricInputs, MetricsError, compute_trace_metrics};
 use crate::recorder::{RecorderError, SessionAggregate};
 use crate::repository::RepositoryIdentity;
 
@@ -59,6 +59,13 @@ pub enum FinalizeError {
         #[from]
         source: agent_jit_domain::canonical::CanonicalError,
     },
+    /// Metrics could not be computed from the stored events.
+    #[error("{}: {source}", source.code())]
+    Metrics {
+        /// The underlying failure.
+        #[from]
+        source: MetricsError,
+    },
 }
 
 impl FinalizeError {
@@ -70,6 +77,7 @@ impl FinalizeError {
             Self::Recorder { source } => source.code(),
             Self::Store { source } => source.code(),
             Self::Canonical { source } => source.code(),
+            Self::Metrics { source } => source.code(),
         }
     }
 }
@@ -97,14 +105,7 @@ pub fn finalize(
     let session_id = derive_session_id(&repository_id, &aggregate.session_key)?;
     let trajectory_id = derive_trajectory_id(&session_id)?;
 
-    if store.get_trajectory(&trajectory_id)?.is_some() {
-        return Ok(FinalizeReport {
-            trajectory_id,
-            session_id,
-            events_written: 0,
-            created: false,
-        });
-    }
+    let existing = store.get_trajectory(&trajectory_id)?.is_some();
 
     let provenance = Provenance {
         produced_by: recorder_version.to_owned(),
@@ -113,34 +114,38 @@ pub fn finalize(
         parents: Vec::new(),
     };
 
-    write_session(
-        store,
-        aggregate,
-        identity,
-        session_id,
-        &provenance,
-        recorder_version,
-    )?;
-    let (event_ids, events_written) = write_events(store, aggregate, session_id, &provenance)?;
-
-    let trajectory = Envelope::new(
-        trajectory_id,
-        provenance,
-        Trajectory {
+    let mut events_written = 0_u32;
+    if !existing {
+        write_session(
+            store,
+            aggregate,
+            identity,
             session_id,
-            repository_id,
-            head_commit: identity.head_commit.clone(),
-            intent: aggregate.intent.clone(),
-            events: event_ids,
-            // The outcome is annotated by a human later; an unannotated trajectory is a fact, and
-            // inventing a status here would put a guess into the evidence Phase 0 reads.
-            outcome_id: None,
-            started_at_unix_ms: aggregate.started_at_unix_ms,
-            duration_ms: aggregate.active_duration_ms,
-        },
-    );
-    store.put_trajectory(&trajectory)?;
-    record_health(store, aggregate)?;
+            &provenance,
+            recorder_version,
+        )?;
+        let (event_ids, written) = write_events(store, aggregate, session_id, &provenance)?;
+        events_written = written;
+
+        let trajectory = Envelope::new(
+            trajectory_id,
+            provenance,
+            Trajectory {
+                session_id,
+                repository_id,
+                head_commit: identity.head_commit.clone(),
+                intent: aggregate.intent.clone(),
+                events: event_ids,
+                // The outcome is annotated by a human later; an unannotated trajectory is a fact, and
+                // inventing a status here would put a guess into the evidence Phase 0 reads.
+                outcome_id: None,
+                started_at_unix_ms: aggregate.started_at_unix_ms,
+                duration_ms: aggregate.active_duration_ms,
+            },
+        );
+        store.put_trajectory(&trajectory)?;
+        record_health(store, aggregate)?;
+    }
 
     // Metrics are computed from the events that were just stored, not from the in-memory
     // aggregate, so the persisted numbers are exactly what a later recomputation would produce.
@@ -160,15 +165,14 @@ pub fn finalize(
         quarantined_segments: u32::try_from(aggregate.quarantined.len()).unwrap_or(u32::MAX),
         duplicates_collapsed: aggregate.duplicates,
     };
-    if let Ok(metrics) = compute_trace_metrics(&stored_events, &inputs) {
-        store.put_trace_metrics(&trajectory_id, &metrics)?;
-    }
+    let metrics = compute_trace_metrics(&stored_events, &inputs)?;
+    store.put_trace_metrics(&trajectory_id, &metrics)?;
 
     Ok(FinalizeReport {
         trajectory_id,
         session_id,
         events_written,
-        created: true,
+        created: !existing,
     })
 }
 

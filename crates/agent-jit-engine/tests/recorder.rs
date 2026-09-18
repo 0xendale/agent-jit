@@ -446,3 +446,132 @@ fn two_identical_events_in_one_session_are_two_distinct_records() {
     ids.dedup();
     assert_eq!(ids.len(), count, "event identifiers must be unique");
 }
+
+fn discoverable_repository(temp: &tempfile::TempDir) -> std::path::PathBuf {
+    use std::path::PathBuf;
+
+    let repository = temp.path().join("repo");
+    std::fs::create_dir_all(&repository).unwrap();
+    for argv in [
+        vec!["init", "--initial-branch=main"],
+        vec!["config", "user.name", "test"],
+        vec!["config", "user.email", "test@example.com"],
+    ] {
+        assert!(
+            std::process::Command::new("git")
+                .args(&argv)
+                .current_dir(&repository)
+                .status()
+                .unwrap()
+                .success()
+        );
+    }
+    std::fs::write(repository.join("README.md"), "seed\n").unwrap();
+    for argv in [
+        vec!["add", "README.md"],
+        vec!["commit", "-m", "seed", "--no-gpg-sign"],
+    ] {
+        assert!(
+            std::process::Command::new("git")
+                .args(&argv)
+                .current_dir(&repository)
+                .status()
+                .unwrap()
+                .success()
+        );
+    }
+    PathBuf::from(&repository)
+}
+
+/// A session finalized all the way except the named table's rows removed, i.e. the state after a
+/// kill inside `finalize`.
+fn finalized_storage(temp: &tempfile::TempDir) -> (agent_jit_store::Store, String) {
+    use agent_jit_engine::process::ProcessRunner;
+    use agent_jit_engine::recorder::finalize;
+    use agent_jit_engine::repository::discover;
+    use agent_jit_store::{Store, StorePath};
+
+    let repository = discoverable_repository(temp);
+    let mut store =
+        Store::open(&StorePath::new(&temp.path().join("state.sqlite3")).unwrap()).unwrap();
+    store.migrate().unwrap();
+
+    let segment_store = segments(&temp.path().join("segments"));
+    segment_store
+        .write(&prompt("repair the crash window"), 10_000)
+        .unwrap();
+    segment_store.write(&stop(), 11_000).unwrap();
+    segment_store.write(&session_end(), 11_100).unwrap();
+
+    let identity = discover(&ProcessRunner::new(), &repository).unwrap();
+    let aggregate = Recorder::new(segment_store).aggregate(SESSION).unwrap();
+    let report = finalize(&mut store, &aggregate, &identity, "agent-jit/0.1.0").unwrap();
+    assert!(report.created);
+    (store, report.trajectory_id.to_string())
+}
+
+#[test]
+fn a_killed_finalize_completes_the_metrics_on_the_next_run() {
+    use agent_jit_engine::process::ProcessRunner;
+    use agent_jit_engine::recorder::finalize;
+    use agent_jit_engine::repository::discover;
+
+    let temp = tempfile::tempdir().unwrap();
+    let (mut store, trajectory_id) = finalized_storage(&temp);
+
+    // Simulate the kill: the trajectory exists, the metrics row does not.
+    let connection = rusqlite::Connection::open(temp.path().join("state.sqlite3")).unwrap();
+    connection
+        .execute(
+            "DELETE FROM trace_metrics WHERE trajectory_id=?1",
+            [trajectory_id.as_str()],
+        )
+        .unwrap();
+    assert!(
+        store
+            .get_trace_metrics(&trajectory_id.parse().unwrap())
+            .unwrap()
+            .is_none(),
+        "the planted state must match the crash window"
+    );
+
+    // The aggregate over the same spool: the recover re-run sees.
+    let store_segments = segments(&temp.path().join("segments"));
+    let aggregate = Recorder::new(store_segments).aggregate(SESSION).unwrap();
+    let identity = discover(&ProcessRunner::new(), &temp.path().join("repo")).unwrap();
+
+    let report = finalize(&mut store, &aggregate, &identity, "agent-jit/0.1.0").unwrap();
+    assert!(!report.created, "the trajectory is already there");
+    assert_eq!(report.events_written, 0);
+    assert!(
+        store
+            .get_trace_metrics(&report.trajectory_id)
+            .unwrap()
+            .is_some(),
+        "the metrics a killed finalize lost are repaired by the next run"
+    );
+}
+
+#[test]
+fn a_finalize_with_no_stored_events_refuses_rather_than_staying_silent() {
+    use agent_jit_engine::process::ProcessRunner;
+    use agent_jit_engine::recorder::finalize;
+    use agent_jit_engine::repository::discover;
+
+    let temp = tempfile::tempdir().unwrap();
+    let (mut store, trajectory_id) = finalized_storage(&temp);
+
+    // Take the stored events away, so metrics cannot be computed.
+    let connection = rusqlite::Connection::open(temp.path().join("state.sqlite3")).unwrap();
+    connection
+        .execute("DELETE FROM events WHERE 1", [])
+        .unwrap();
+
+    let store_segments = segments(&temp.path().join("segments"));
+    let aggregate = Recorder::new(store_segments).aggregate(SESSION).unwrap();
+    let identity = discover(&ProcessRunner::new(), &temp.path().join("repo")).unwrap();
+
+    let error = finalize(&mut store, &aggregate, &identity, "agent-jit/0.1.0").unwrap_err();
+    assert_eq!(error.code(), "metrics_no_events");
+    let _ = trajectory_id;
+}
