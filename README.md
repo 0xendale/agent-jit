@@ -23,6 +23,8 @@ Current code supports recorder development and evaluation:
 Later experiment and capability commands are visible in `--help` but intentionally return
 `not_implemented`. There is no usable compiled-capability release yet.
 
+The full command reference is [`docs/guide/usage.md`](docs/guide/usage.md).
+
 ## Requirements
 
 - Apple Silicon Mac running macOS (`aarch64-apple-darwin`)
