@@ -3,7 +3,7 @@
 use std::path::Path;
 
 use agent_jit_engine::process::ProcessRunner;
-use agent_jit_engine::recorder::{Recorder, SegmentStore, finalize};
+use agent_jit_engine::recorder::{Recorder, SegmentStore, finalize, has_stored_trajectory};
 use agent_jit_engine::repository::discover;
 use agent_jit_store::{CURRENT_SCHEMA_VERSION, Store, StorePath};
 use serde_json::json;
@@ -146,6 +146,7 @@ fn recover(as_json: bool) -> Result<Rendered, CommandError> {
     })?;
 
     let mut recovered = Vec::new();
+    let mut drained = Vec::new();
     let mut pending = Vec::new();
     let mut quarantined = 0_u32;
     let mut skipped = Vec::new();
@@ -154,12 +155,41 @@ fn recover(as_json: bool) -> Result<Rendered, CommandError> {
         let aggregate = match recorder.aggregate(&session_key) {
             Ok(aggregate) => aggregate,
             Err(error) => {
-                skipped.push(json!({"session": session_key, "code": error.code()}));
+                // Nothing was accepted, so the directory can never complete: discard it rather
+                // than reporting the same `recorder_empty_session` skip on every recover. This
+                // also removes `.tmp-` leftovers, which only a full discard deletes.
+                if error.code() == "recorder_empty_session"
+                    && segments.discard_session(&session_key).is_ok()
+                {
+                    drained.push(json!({"session": session_key}));
+                } else {
+                    skipped.push(json!({"session": session_key, "code": error.code()}));
+                }
                 continue;
             }
         };
         quarantined = quarantined
             .saturating_add(u32::try_from(aggregate.quarantined.len()).unwrap_or(u32::MAX));
+
+        let identity = match discover(&ProcessRunner::new(), Path::new(&aggregate.cwd)) {
+            Ok(identity) => identity,
+            Err(error) => {
+                skipped.push(json!({"session": session_key, "code": error.code()}));
+                continue;
+            }
+        };
+
+        // Residue of a killed discard: the trajectory is already stored, so whatever the
+        // aggregate looks like, the evidence is final and the spool bytes are discardable.
+        if !aggregate.complete
+            && has_stored_trajectory(&store, &aggregate, &identity).unwrap_or(false)
+        {
+            segments.discard_session(&session_key).map_err(|error| {
+                CommandError::new(error.code(), error.to_string(), ExitClass::Internal)
+            })?;
+            drained.push(json!({"session": session_key}));
+            continue;
+        }
 
         if !aggregate.complete {
             pending.push(json!({
@@ -169,14 +199,6 @@ fn recover(as_json: bool) -> Result<Rendered, CommandError> {
             }));
             continue;
         }
-
-        let identity = match discover(&ProcessRunner::new(), Path::new(&aggregate.cwd)) {
-            Ok(identity) => identity,
-            Err(error) => {
-                skipped.push(json!({"session": session_key, "code": error.code()}));
-                continue;
-            }
-        };
 
         let report =
             finalize(&mut store, &aggregate, &identity, RECORDER_VERSION).map_err(|error| {
@@ -197,6 +219,7 @@ fn recover(as_json: bool) -> Result<Rendered, CommandError> {
 
     let report = json!({
         "recovered": recovered,
+        "drained": drained,
         "pending": pending,
         "skipped": skipped,
         "quarantined_segments": quarantined,
@@ -206,8 +229,9 @@ fn recover(as_json: bool) -> Result<Rendered, CommandError> {
         return Ok(Rendered::Json(report));
     }
     Ok(Rendered::Text(format!(
-        "recovered {} session(s), {} still open, {} skipped, {} quarantined segment(s)\n",
+        "recovered {} session(s), {} residue drained, {} still open, {} skipped, {} quarantined segment(s)\n",
         recovered.len(),
+        drained.len(),
         pending.len(),
         skipped.len(),
         quarantined

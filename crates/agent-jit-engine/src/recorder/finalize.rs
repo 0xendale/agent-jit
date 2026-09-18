@@ -82,6 +82,25 @@ impl FinalizeError {
     }
 }
 
+/// Whether this aggregate's derived trajectory is already stored.
+///
+/// Identity is derived exactly as [`finalize`] derives it, so this answers the question a
+/// recovery run needs before deciding residue from a killed discard is safe to drain.
+///
+/// # Errors
+///
+/// Returns [`FinalizeError`] when the identifiers cannot be derived or the database refuses a
+/// read.
+pub fn has_stored_trajectory(
+    store: &Store,
+    aggregate: &SessionAggregate,
+    identity: &RepositoryIdentity,
+) -> Result<bool, FinalizeError> {
+    let session_id = derive_session_id(&identity.repo_id, &aggregate.session_key)?;
+    let trajectory_id = derive_trajectory_id(&session_id)?;
+    Ok(store.get_trajectory(&trajectory_id)?.is_some())
+}
+
 /// Writes one aggregated session into the store.
 ///
 /// # Errors

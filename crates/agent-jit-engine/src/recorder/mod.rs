@@ -8,7 +8,7 @@
 mod finalize;
 mod segment;
 
-pub use finalize::{FinalizeError, FinalizeReport, finalize};
+pub use finalize::{FinalizeError, FinalizeReport, finalize, has_stored_trajectory};
 pub use segment::{
     QuarantinedSegment, SEGMENT_VERSION, Segment, SegmentStore, SegmentWriteError, SessionSegments,
 };

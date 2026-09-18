@@ -434,3 +434,132 @@ fn trace_metrics_for_an_unknown_trajectory_is_a_usage_error() {
         .code(2)
         .stdout(contains("trace_not_found"));
 }
+
+#[test]
+fn the_residue_of_a_killed_discard_is_drained_by_the_next_recover() {
+    let home = tempfile::tempdir().unwrap();
+    let repository = tempfile::tempdir().unwrap();
+    init_repo(repository.path());
+    bin(home.path())
+        .args(["store", "migrate", "--json"])
+        .assert()
+        .success();
+    record_session(home.path(), repository.path());
+    bin(home.path())
+        .args(["store", "recover", "--json"])
+        .assert()
+        .success();
+
+    let session_directory = home.path().join("cache/spool/segments").join(SESSION);
+    std::fs::create_dir_all(&session_directory).unwrap();
+    std::fs::write(session_directory.join(".tmp-1-stop.json"), b"{}").unwrap();
+
+    let report = json(
+        &bin(home.path())
+            .args(["store", "recover", "--json"])
+            .assert()
+            .success()
+            .get_output()
+            .stdout,
+    );
+    assert_eq!(report["drained"].as_array().unwrap().len(), 1, "{report}");
+    assert_eq!(report["skipped"].as_array().unwrap().len(), 0, "{report}");
+    assert_eq!(report["pending"].as_array().unwrap().len(), 0, "{report}");
+    assert_eq!(report["recovered"].as_array().unwrap().len(), 0, "{report}");
+    assert!(
+        !home
+            .path()
+            .join("cache/spool/segments")
+            .join(SESSION)
+            .exists(),
+        "the drained residue is gone"
+    );
+
+    let again = json(
+        &bin(home.path())
+            .args(["store", "recover", "--json"])
+            .assert()
+            .success()
+            .get_output()
+            .stdout,
+    );
+    assert_eq!(again["drained"].as_array().unwrap().len(), 0, "{again}");
+    assert_eq!(again["skipped"].as_array().unwrap().len(), 0, "{again}");
+}
+
+#[test]
+fn partial_residue_of_a_finalized_session_is_drained_without_recounting_work() {
+    let home = tempfile::tempdir().unwrap();
+    let repository = tempfile::tempdir().unwrap();
+    init_repo(repository.path());
+    bin(home.path())
+        .args(["store", "migrate", "--json"])
+        .assert()
+        .success();
+    record_session(home.path(), repository.path());
+    let recovered = bin(home.path())
+        .args(["store", "recover", "--json"])
+        .assert()
+        .success();
+    let trajectory_id = json(&recovered.get_output().stdout)["recovered"][0]["trajectory_id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+
+    // A second run of the same session wrote new segments, and the discard died before the
+    // trailing segments (including `SessionEnd`) were removed: only the early ones remain.
+    record_session(home.path(), repository.path());
+    let session_directory = home.path().join("cache/spool/segments").join(SESSION);
+    let mut files: Vec<_> = std::fs::read_dir(&session_directory)
+        .unwrap()
+        .flatten()
+        .map(|entry| entry.path())
+        .collect();
+    files.sort();
+    std::fs::remove_file(files.last().unwrap()).unwrap();
+
+    let report = json(
+        &bin(home.path())
+            .args(["store", "recover", "--json"])
+            .assert()
+            .success()
+            .get_output()
+            .stdout,
+    );
+    assert_eq!(report["drained"].as_array().unwrap().len(), 1, "{report}");
+    assert_eq!(report["pending"].as_array().unwrap().len(), 0, "{report}");
+    assert_eq!(report["recovered"].as_array().unwrap().len(), 0, "{report}");
+    assert!(
+        !session_directory.exists(),
+        "the stranded early segments are gone"
+    );
+
+    let listed = json(
+        &bin(home.path())
+            .args([
+                "trace",
+                "list",
+                "--repo",
+                repository.path().to_str().unwrap(),
+                "--json",
+            ])
+            .assert()
+            .success()
+            .get_output()
+            .stdout,
+    );
+    assert_eq!(listed["count"], 1, "the drain adds no trajectory");
+    let shown = json(
+        &bin(home.path())
+            .args(["trace", "show", &trajectory_id, "--json"])
+            .assert()
+            .success()
+            .get_output()
+            .stdout,
+    );
+    assert_eq!(
+        shown["events"].as_array().unwrap().len(),
+        6,
+        "the drain adds no events"
+    );
+}
