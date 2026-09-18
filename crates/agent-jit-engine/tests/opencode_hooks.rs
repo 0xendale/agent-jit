@@ -32,7 +32,7 @@ fn opencode_hook_session_start_is_normalized() {
 
     assert_eq!(hook.kind, HookEventKind::SessionStart);
     assert_eq!(hook.session_key, "b2c3d4e5-1111-2222-3333-444455556666");
-    assert_eq!(hook.cwd, "/Users/someone/code/pipeline-viz");
+    assert_eq!(hook.cwd, "/Users/someone/code/example-repo");
     assert_eq!(hook.claude_version.as_deref(), Some("1.18.29"));
     assert!(
         matches!(hook.payload, opencode_hooks::HookPayload::SessionStart { ref source } if source == "created")

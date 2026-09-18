@@ -1,5 +1,5 @@
 {
-  "cwd": "/Users/someone/code/pipeline-viz",
+  "cwd": "/Users/someone/code/example-repo",
   "hook_event_name": "UserPromptSubmit",
   "prompt": "hello"
 }
