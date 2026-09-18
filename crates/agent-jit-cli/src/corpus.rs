@@ -21,8 +21,7 @@ use crate::output::Rendered;
 /// Trajectories Phase 0 requires before the thesis can be judged.
 pub const REQUIRED_TRAJECTORIES: u32 = 50;
 
-const USAGE: &str =
-    "usage: agent-jit corpus <status | import-claude | hold | release | export | prune> [options]";
+const USAGE: &str = "usage: agent-jit corpus <status | import-claude | hold | release | export | prune | qualify> [options]";
 
 /// Dispatches a `corpus` subcommand.
 ///
@@ -37,6 +36,7 @@ pub fn run(args: &[String]) -> Result<Rendered, CommandError> {
         Some("release") => crate::corpus_ops::hold(&args[1..], true),
         Some("prune") => crate::corpus_ops::prune(&args[1..]),
         Some("export") => crate::corpus_export::run(&args[1..]),
+        Some("qualify") => crate::corpus_qualify::run(&args[1..]),
         Some(other) => Err(CommandError::usage(format!(
             "unknown corpus subcommand: {other}\n{USAGE}"
         ))),

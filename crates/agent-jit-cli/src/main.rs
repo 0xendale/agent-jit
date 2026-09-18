@@ -14,6 +14,7 @@ mod corpus_export;
 mod corpus_export_io;
 mod corpus_export_redaction;
 mod corpus_ops;
+mod corpus_qualify;
 mod doctor;
 mod doctor_recorder;
 mod error;

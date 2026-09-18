@@ -20,13 +20,6 @@ pub enum ExitClass {
     /// The command refused for a safety reason: a private path, a sandbox failure, a secret.
     SafetyRefusal = 4,
     /// A gate decided to stop. Not a defect: a documented outcome.
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "part of the published exit contract; first constructed by the Phase 0 gate"
-        )
-    )]
     GateStop = 5,
     /// The command hit a fault it does not attribute to the caller.
     Internal = 70,
